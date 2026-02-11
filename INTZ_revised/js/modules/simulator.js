@@ -1,1 +1,0 @@
-export function renderSimulator(){ document.getElementById('app').innerHTML=`<section class='panel'><h3>Responssimulator</h3><p>— (kommer senere). Knapp for tilbake til økta under.</p><div class='footer-actions'><a class='btn' href='#/workout'>Tilbake til økta</a></div></section>`; }
