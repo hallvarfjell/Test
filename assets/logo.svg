@@ -1,0 +1,6 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='200' height='40' viewBox='0 0 200 40'>
+  <rect width='200' height='40' rx='8' fill='#ffffff' stroke='#dfe6f5'/>
+  <text x='12' y='27' font-family='Segoe UI, Roboto, Arial, sans-serif' font-size='22' fill='#0b1220' font-weight='700'>INTZ</text>
+  <circle cx='175' cy='20' r='10' fill='#0d6efd'/>
+  <text x='170' y='24' font-size='14' fill='#ffffff' font-weight='700'>Z</text>
+</svg>
