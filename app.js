@@ -8,7 +8,7 @@ const AppState = {
   hr: {connected:false, bpm:0},
   tm: {connected:false, speed:0, incline:0},
   wakeLock: null,
-  workouts: Storage.load('workouts', Workouts.defaults()),
+  workouts: Storage.load('workouts', (typeof Workouts!=='undefined'?Workouts.defaults():[])),
   logg: Storage.load('logg', []),
   plan: null
 };

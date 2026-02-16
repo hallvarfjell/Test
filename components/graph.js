@@ -19,7 +19,7 @@ const Graph = (function(){
   }
 
   function initTIZ(container){
-    container.innerHTML=''; cTIZ = document.createElement('canvas'); ctxTIZ=cTIZ.getContext('2d'); container.appendChild(cTIZ);
+    container.innerHTML=''; cTIZ = document.createElement('canvas'); cTIZ.id='tiz'; ctxTIZ=cTIZ.getContext('2d'); container.appendChild(cTIZ);
     const ro = new ResizeObserver(()=>{ const r=container.getBoundingClientRect(); cTIZ.width=r.width; cTIZ.height=r.height; drawTIZ(); }); ro.observe(container);
   }
 
@@ -54,7 +54,7 @@ const Graph = (function(){
     }
   }
 
-  function slope30(){ const t1=Date.now()/1000, t0=t1-30; const pts=hr.filter(p=>p.t>=t0); if(pts.length<2) return 0; return (pts[-1].bpm-pts[0].bpm)/30; }
+  function slope30(){ const t1=Date.now()/1000, t0=t1-30; const pts=hr.filter(p=>p.t>=t0); if(pts.length<2) return 0; return (pts[pts.length-1].bpm-pts[0].bpm)/30; }
 
   function drawTIZ(){ if(!ctxTIZ) return; const W=cTIZ.width, H=cTIZ.height; ctxTIZ.clearRect(0,0,W,H); const total = tiz.reduce((a,b)=>a+b,0)||1; const labels=['S0','S1','S2','S3','S4','S5']; const colors=['#c7c9d3','#79d49a','#a0b7d8','#f2e56b','#ffb56b','#ff6b6b'];
     const barH=H/6*0.8; const gap=H/6*0.2; for(let i=0;i<6;i++){ const y=i*(barH+gap)+gap/2; const frac=tiz[i]/total; const w=Math.round(frac*W); ctxTIZ.fillStyle=colors[i]; ctxTIZ.fillRect(0,y,w,barH); ctxTIZ.fillStyle='#0b1220'; ctxTIZ.fillText(`${labels[i]} ${(tiz[i]||0)}s (${Math.round(frac*100)}%)`, 8, y+barH/2+4); }

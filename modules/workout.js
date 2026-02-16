@@ -48,7 +48,7 @@ const Workout = {
     const tiz = UI.h('div',{class:'tiz'}); Graph.initTIZ(tiz);
     stat.append(tbl, UI.h('div',{class:'card'}, UI.h('h3',{},'Tid i pulssoner'), tiz));
 
-    grid.append(yt, graf, op, stat); el.append(grid);
+    grid.append(yt, graf, op, stat); el.append(grid); try{ document.getElementById('app').scrollTop = 0; }catch(e){}
 
     // --- STATE ---
     const seq = expand(plan.blocks);
