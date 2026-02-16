@@ -10,9 +10,7 @@ const Editor = {
       list.innerHTML=''; plan.blocks.forEach((b,i)=>{
         const it = UI.h('div',{class:'list-item'});
         it.append(textBlock(b));
-        it.append(UI.h('div',{class:'controls'},
-          UI.h('button',{class:'btn',onclick:()=>{ plan.blocks.splice(i,1); redraw(); }},'Slett')
-        ));
+        it.append(UI.h('div',{class:'controls'}, UI.h('button',{class:'btn',onclick:()=>{ plan.blocks.splice(i,1); redraw(); }},'Slett')));
         list.appendChild(it);
       });
     }

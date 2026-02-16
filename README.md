@@ -1,23 +1,10 @@
-# INTZ Basic
+# INTZ Basic v1.0.2
 
-En nedstrippet, robust PWA for intervalltrening med fokus på kjernefunksjoner og stabilitet. Laget for Samsung Galaxy Tab S9 i liggende format, lyst tema og med Web Bluetooth for puls (HR) og valgfritt FTMS (tredemølle). Ingen service worker for å unngå cache-problemer – kjør direkte fra GitHub Pages.
-
-## Moduler
-- **Dashboard**: forhåndsdefinerte økter (6x6, 8x6, 6x5, 3x10x45/15, Egendefinert). Play (▶) starter økta, ✎ åpner editor. 
-- **Editor**: bygg økter (Oppvarming, Intervall (reps, arbeid, pause), Serie (serier, reps, 45/15 osv med serierest), Pause, Nedjogg).
-- **Økt**: stor visning for puls/fart/stigning, HR+Speed graf (15 min), LT1/LT2, nåværende + neste 2 faser, stor nedtelling, statistikk (snitt HR/fart for drag, distanse, totaltid, dragtid, gjenstående, klokkeslett) og tid-i-sone stolpediagram.
-- **Innstillinger**: vekt, HRmax, LT1/LT2, pulssoner (redigerbare grenser).
-- **Logg**: enkel oversikt over lagrede økter.
+Kvalitetssikret Øktmodul: faste akseverdier (venstre HR, høyre fart), LT1/LT2 med tekst, større Øktpanel (60% av høyre), stabil TIZ-høyde, og sikrere håndtering av tredemølle (FTMS) vs. manuell fart.
 
 ## Viktig
-- Web Bluetooth (HR/FTMS) krever **HTTPS** og fungerer best i Chrome/Edge på Android/desktop.
-- FTMS er **valgfritt**. Manuell ± for fart og stigning er alltid tilgjengelig. Under pauser settes beregnet fart til 0 (selv om mølla går).
-- **Skjermlås**: bruk ☀️ for å aktivere Wake Lock (der støttet) slik at skjermen holder seg på.
+- FTMS: vi oppdaterer fart/stigning **bare hvis verdier faktisk rapporteres**. Manglende felter rapporteres som `null` (overstyrer **ikke** manuell). Manuell justering gir **4 sekunder** midlertidig prioritet over FTMS.
+- Pauser: distanseberegning setter fart=0 i pauser, men visningen av fart følger sist gyldige verdi fra manuell/FTMS.
 
 ## Publisering
-1. Opprett et tomt GitHub-repo (f.eks. `intz-basic`).
-2. Last opp filene fra `intz_basic/` til rot av repoet.
-3. I **Settings → Pages**: *Deploy from branch*, branch `main`, folder `/root`.
-4. Åpne `https://<bruker>.github.io/intz-basic/`.
-
-Lykke til!
+Som tidligere: last opp innholdet i `intz_basic_v102/` til repoet og kjør via GitHub Pages.

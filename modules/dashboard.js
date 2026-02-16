@@ -16,7 +16,7 @@ const Dashboard = {
     }
 
     function describe(w){
-      for(const b of w.blocks){ if(b.kind==='Intervall') return `– ${b.reps}×${b.work/60} min arbeid / ${b.rest}s pause`; if(b.kind==='Serie') return `– ${b.series}× (${b.reps}×${b.work}s/${b.rest}s) med ${b.seriesRest}s seriepause`; }
+      for(const b of w.blocks){ if(b.kind==='Intervall') return `– ${b.reps}×${(b.work/60).toFixed(0)} min arbeid / ${b.rest}s pause`; if(b.kind==='Serie') return `– ${b.series}× (${b.reps}×${b.work}s/${b.rest}s) med ${b.seriesRest}s seriepause`; }
       return '';
     }
 

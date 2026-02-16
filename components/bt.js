@@ -24,7 +24,9 @@ const BT = {
       let spd=0, inc=0;
       if(flags & 0x0001){ spd = dv.getUint16(idx,true)/100; idx+=2; } // m/s
       if(flags & 0x0002){ inc = dv.getInt16(idx,true)/10; idx+=2; }  // 0.1%
-      const kmh = Math.round(spd*3.6*10)/10; onData(kmh, Math.round(inc));
+      const kmh = (flags & 0x0001) ? Math.round(spd*3.6*10)/10 : null; // NÅ: null hvis ikke rapportert
+      const incOut = (flags & 0x0002) ? Math.round(inc) : null;       // NÅ: null hvis ikke rapportert
+      onData(kmh, incOut);
     });
   }
 };

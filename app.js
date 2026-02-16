@@ -1,12 +1,8 @@
-// INTZ Basic app
+// INTZ Basic v1.0.2 app
 const AppState = {
-  settings: Storage.load('settings', {
-    vekt:null, hrmax:190, lt1:135, lt2:160,
-    soner:[115,134,145,164,174], // danner sone0..5 i graph
-    tema:'light'
-  }),
+  settings: Storage.load('settings', { vekt:null, hrmax:190, lt1:135, lt2:160, soner:[115,134,145,164,174], tema:'light' }),
   hr: {connected:false, bpm:0},
-  tm: {connected:false, speed:0, incline:0},
+  tm: {connected:false, speed:0, incline:0, manualUntil:0},
   wakeLock: null,
   workouts: Storage.load('workouts', (typeof Workouts!=='undefined'?Workouts.defaults():[])),
   logg: Storage.load('logg', []),
@@ -41,7 +37,7 @@ window.addEventListener('load', ()=>{
     catch(e){ alert('HR tilkobling feilet: '+e.message); }
   });
   document.getElementById('btn-ftms').addEventListener('click', async ()=>{
-    try{ await BT.connectFTMS((spd,inc)=>{ AppState.tm.speed=spd; AppState.tm.incline=inc; AppState.tm.connected=true; UI.setConnected('btn-ftms', true); if(Workout.onTM) Workout.onTM(spd,inc); }); }
+    try{ await BT.connectFTMS((spd,inc)=>{ if(Workout.onTM) Workout.onTM(spd,inc); AppState.tm.connected=true; UI.setConnected('btn-ftms', true); }); }
     catch(e){ alert('FTMS (tredemølle) er valgfritt. Manuell justering er alltid tilgjengelig. '+e.message); }
   });
   // Wake lock

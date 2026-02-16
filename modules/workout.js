@@ -10,21 +10,21 @@ const Workout = {
     const hrBig = UI.h('div',{class:'kpi-col'}, UI.h('div',{class:'kpi-label'},'Puls'), UI.h('div',{class:'big', id:'hr'}, String(st.hr.bpm||0)), UI.h('div',{class:'sub', id:'hrp'}, ''));
     const spdCol = UI.h('div',{class:'kpi-col'}, UI.h('div',{class:'kpi-label'},'Fart / Stigning'), UI.h('div',{class:'kpi-val', id:'spd'}, '0.0 km/t'), UI.h('div',{class:'kpi-val', id:'inc'}, '0%'));
     const spdCtrls = UI.h('div',{class:'kpi-col'}, UI.h('div',{class:'kpi-label'},'Juster (manuell)'),
-      UI.h('div',{class:'controls'}, UI.h('button',{class:'btn',onclick:()=>{ st.tm.speed=Math.max(0,(st.tm.speed||0)-0.1); updSPD(); }},'-'), UI.h('button',{class:'btn',onclick:()=>{ st.tm.speed=(st.tm.speed||0)+0.1; updSPD(); }},'+')),
-      UI.h('div',{class:'controls'}, UI.h('button',{class:'btn',onclick:()=>{ st.tm.incline=Math.max(0,(st.tm.incline||0)-1); updINC(); }},'-'), UI.h('button',{class:'btn',onclick:()=>{ st.tm.incline=(st.tm.incline||0)+1; updINC(); }},'+'))
+      UI.h('div',{class:'controls'}, UI.h('button',{class:'btn',onclick:()=>{ st.tm.speed=Math.max(0,(st.tm.speed||0)-0.1); st.tm.manualUntil=Date.now()+4000; updSPD(); }},'-'), UI.h('button',{class:'btn',onclick:()=>{ st.tm.speed=(st.tm.speed||0)+0.1; st.tm.manualUntil=Date.now()+4000; updSPD(); }},'+')),
+      UI.h('div',{class:'controls'}, UI.h('button',{class:'btn',onclick:()=>{ st.tm.incline=Math.max(0,(st.tm.incline||0)-1); st.tm.manualUntil=Date.now()+4000; updINC(); }},'-'), UI.h('button',{class:'btn',onclick:()=>{ st.tm.incline=(st.tm.incline||0)+1; st.tm.manualUntil=Date.now()+4000; updINC(); }},'+'))
     );
     yt.append(hrBig, spdCol, spdCtrls);
 
     // GRAF
     const graf = UI.h('section',{class:'graf'}); Graph.init(graf, {lt1:st.settings.lt1, lt2:st.settings.lt2, soner: st.settings.soner});
 
-    // ØKTPANEL
+    // ØKTPANEL (større): i høyre kolonne wrapper
     const op = UI.h('section',{class:'oktpanel'});
+    const title = UI.h('h2',{},plan.name);
     const phaseNow = UI.h('div',{class:'list-item', id:'phaseNow'}, '–');
     const phaseNext = UI.h('div',{class:'small', id:'phaseNext'}, '');
     const phaseNext2 = UI.h('div',{class:'small', id:'phaseNext2'}, '');
     const timer = UI.h('div',{class:'big', id:'timer'}, '00:00');
-
     const ctrl = UI.h('div',{class:'controls'},
       UI.h('button',{class:'btn primary', id:'start'},'Start'),
       UI.h('button',{class:'btn', id:'pause', disabled:true},'Pause'),
@@ -33,7 +33,7 @@ const Workout = {
       UI.h('button',{class:'btn', id:'save', disabled:true},'Lagre'),
       UI.h('button',{class:'btn danger', id:'discard', disabled:true},'Forkast')
     );
-    op.append(UI.h('h2',{},plan.name), phaseNow, phaseNext, phaseNext2, timer, ctrl);
+    op.append(title, phaseNow, phaseNext, phaseNext2, timer, ctrl);
 
     // STAT PANEL
     const stat = UI.h('section',{class:'stat'});
@@ -48,17 +48,23 @@ const Workout = {
     const tiz = UI.h('div',{class:'tiz'}); Graph.initTIZ(tiz);
     stat.append(tbl, UI.h('div',{class:'card'}, UI.h('h3',{},'Tid i pulssoner'), tiz));
 
-    grid.append(yt, graf, op, stat); el.append(grid); try{ document.getElementById('app').scrollTop = 0; }catch(e){}
+    const right = UI.h('div',{class:'rightcol'}); right.append(op, stat);
+    grid.append(yt, graf, right); el.append(grid);
+
+    try{ document.getElementById('app').scrollTop = 0; }catch(e){}
 
     // --- STATE ---
     const seq = expand(plan.blocks);
-    let idx=0, left=0, started=false, paused=false, timerHandle=null; let tTot=0, tDrag=0, dist=0; const hrSamples=[]; const spdSamples=[];
+    let idx=0, left=0, started=false, paused=false, timerHandle=null; let tTot=0, tDrag=0, dist=0; const hrSamples=[], spdSamples=[];
 
     function expand(blocks){
       const out=[]; blocks.forEach(b=>{
         if(b.kind==='Oppvarming'||b.kind==='Nedjogg'||b.kind==='Pause') out.push({kind:b.kind, dur:b.dur});
-        else if(b.kind==='Intervall'){ for(let i=1;i<=b.reps;i++){ out.push({kind:'Arbeid', dur:b.work, rep:i, reps:b.reps}); if(b.rest>0) out.push({kind:'Pause', dur:b.rest}); } }
-        else if(b.kind==='Serie'){ for(let s=1;s<=b.series;s++){ for(let i=1;i<=b.reps;i++){ out.push({kind:'Arbeid', dur:b.work, rep:i, reps:b.reps, set:s, sets:b.series}); if(b.rest>0) out.push({kind:'Pause', dur:b.rest}); } if(s<b.series && b.seriesRest) out.push({kind:'Pause', dur:b.seriesRest}); } }
+        else if(b.kind==='Intervall'){
+          for(let i=1;i<=b.reps;i++){ out.push({kind:'Arbeid', dur:b.work, rep:i, reps:b.reps}); if(b.rest>0) out.push({kind:'Pause', dur:b.rest}); }
+        }else if(b.kind==='Serie'){
+          for(let s=1;s<=b.series;s++){ for(let i=1;i<=b.reps;i++){ out.push({kind:'Arbeid', dur:b.work, rep:i, reps:b.reps, set:s, sets:b.series}); if(b.rest>0) out.push({kind:'Pause', dur:b.rest}); } if(s<b.series && b.seriesRest) out.push({kind:'Pause', dur:b.seriesRest}); }
+        }
       }); return out;
     }
 
@@ -66,28 +72,17 @@ const Workout = {
     function updINC(){ document.getElementById('inc').textContent = `${Math.round(st.tm.incline||0)}%`; }
 
     Workout.onHR = bpm=>{ document.getElementById('hr').textContent=String(bpm); const p=Math.round((bpm/(st.settings.hrmax||190))*100); document.getElementById('hrp').textContent=`~${p}% av maks`; Graph.addHR(bpm); };
-    Workout.onTM = (s,i)=>{ st.tm.speed=s; st.tm.incline=i; updSPD(); updINC(); };
+    Workout.onTM = (sp,inc)=>{ const now=Date.now(); if(sp!==null && ( !st.tm.manualUntil || now>st.tm.manualUntil )) st.tm.speed=sp; if(inc!==null) st.tm.incline=inc; updSPD(); updINC(); };
 
-    function setPhase(){ const cur = seq[idx]; if(!cur){ finish(true); return; } left=cur.dur; phaseNow.textContent = label(cur); phaseNext.textContent = seq[idx+1]? ('Neste: '+label(seq[idx+1])):''; phaseNext2.textContent = seq[idx+2]? ('Deretter: '+label(seq[idx+2])):''; document.getElementById('tLeft').textContent = UI.fmtTime(totalRemaining()); tDrag=0;}
     function label(x){ let base=x.kind; if(x.kind==='Arbeid' && x.rep) base+=` drag ${x.rep}/${x.reps}${x.set?`, serie ${x.set}/${x.sets||1}`:''}`; return base; }
     function totalRemaining(){ return seq.slice(idx).reduce((a,b)=>a+b.dur,0); }
 
+    function setPhase(){ const cur = seq[idx]; if(!cur){ finish(true); return; } left=cur.dur; phaseNow.textContent = label(cur); phaseNext.textContent = seq[idx+1]? ('Neste: '+label(seq[idx+1])):''; phaseNext2.textContent = seq[idx+2]? ('Deretter: '+label(seq[idx+2])):''; document.getElementById('tLeft').textContent = UI.fmtTime(totalRemaining()); tDrag=0; }
+
     function tick(){ if(paused) return; tTot++; tDrag++; document.getElementById('tTot').textContent=UI.fmtTime(tTot); document.getElementById('tDrag').textContent=UI.fmtTime(tDrag); document.getElementById('timer').textContent=UI.fmtTime(left); document.getElementById('clock2').textContent=new Date().toLocaleTimeString();
-      // Distanseintegrasjon (km/h * s / 3600)
       const cur = seq[idx]; const spdNow = (cur.kind==='Pause')? 0 : (st.tm.speed||0); dist += spdNow/3600; document.getElementById('dist').textContent = dist.toFixed(2);
-      // samples for drag avg
       if(cur.kind==='Arbeid'){ if(st.hr.bpm) hrSamples.push(st.hr.bpm); spdSamples.push(spdNow); }
-      left--; if(left<=0){
-        // write stats for drag
-        if(cur.kind==='Arbeid'){
-          const aHR = Math.round(hrSamples.reduce((a,b)=>a+b,0)/(hrSamples.length||1));
-          const aSpd = (spdSamples.reduce((a,b)=>a+b,0)/(spdSamples.length||1)).toFixed(1);
-          document.getElementById('avgHR').textContent = String(aHR);
-          document.getElementById('avgSpd').textContent = String(aSpd);
-          hrSamples.length=0; spdSamples.length=0;
-        }
-        idx++; setPhase();
-      }
+      left--; if(left<=0){ if(cur.kind==='Arbeid'){ const aHR = Math.round(hrSamples.reduce((a,b)=>a+b,0)/(hrSamples.length||1)); const aSpd = (spdSamples.reduce((a,b)=>a+b,0)/(spdSamples.length||1)).toFixed(1); document.getElementById('avgHR').textContent = String(aHR); document.getElementById('avgSpd').textContent = String(aSpd); hrSamples.length=0; spdSamples.length=0; } idx++; setPhase(); }
     }
 
     function start(){ if(started) return; started=true; paused=false; setPhase(); timerHandle=setInterval(tick,1000); document.getElementById('start').disabled=true; ['pause','prev','next','save','discard'].forEach(id=>document.getElementById(id).disabled=false); }
@@ -103,7 +98,10 @@ const Workout = {
     document.getElementById('save').addEventListener('click', ()=>finish(true));
     document.getElementById('discard').addEventListener('click', ()=>{ if(confirm('Forkaste uten å lagre?')) finish(false); });
 
-    // init
+    // Før start: vis første fase + to neste og rett timer
+    (function preview(){ idx=0; const cur=seq[idx]; left = cur?cur.dur:0; if(cur){ phaseNow.textContent = label(cur); phaseNext.textContent = seq[idx+1]? ('Neste: '+label(seq[idx+1])):''; phaseNext2.textContent = seq[idx+2]? ('Deretter: '+label(seq[idx+2])):''; document.getElementById('timer').textContent = UI.fmtTime(left); document.getElementById('tLeft').textContent = UI.fmtTime(totalRemaining()); } })();
+
+    // init visninger
     updSPD(); updINC();
   }
 };
