@@ -4,7 +4,7 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="theme-color" content="#ffffff"/>
-  <title>INTZ – Basic v1.0.2</title>
+  <title>INTZ – Basic v1.1.0</title>
   <link rel="manifest" href="./manifest.webmanifest"/>
   <link rel="icon" href="./assets/icons/icon-192.png"/>
   <link rel="stylesheet" href="./app.css"/>
@@ -28,13 +28,14 @@
       <button class="nav-btn" onclick="location.hash='#/workout'">Økt</button>
       <button class="nav-btn" onclick="location.hash='#/editor'">Editor</button>
       <button class="nav-btn" onclick="location.hash='#/settings'">Innstillinger</button>
+      <button class="nav-btn" onclick="location.hash='#/pi'">PI</button>
       <button class="nav-btn" onclick="location.hash='#/log'">Logg</button>
     </nav>
   </header>
 
   <main id="app" class="app" tabindex="-1" aria-live="polite"></main>
 
-  <footer class="footer"><small>INTZ Basic v1.0.2 – fokus på stabilitet. Kjør i Chrome/Edge over HTTPS.</small></footer>
+  <footer class="footer"><small>INTZ Basic v1.1.0 – fokus på stabilitet.</small></footer>
 
   <script src="./components/ui.js"></script>
   <script src="./components/storage.js"></script>
@@ -46,6 +47,7 @@
   <script src="./modules/workout.js"></script>
   <script src="./modules/settings.js"></script>
   <script src="./modules/log.js"></script>
+  <script src="./modules/pi.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>
