@@ -1,4 +1,4 @@
-// INTZ Basic v1.3.0 app
+// INTZ Basic v1.3.1 app
 const AppState = {
   currentProfile: Storage.load('profile','Hallvar'),
   settings: null,
@@ -12,7 +12,7 @@ const AppState = {
 };
 
 function reloadStateForProfile(){
-  AppState.settings = Storage.loadP(AppState.currentProfile, 'settings', { hrmax:190, lt1:135, lt2:160, soner:[115,134,145,164,174] });
+  AppState.settings = Storage.loadP(AppState.currentProfile, 'settings', { hrmax:190, hrrest:50, lt1:135, lt2:160, soner:[115,134,145,164,174], mass:75 });
   AppState.workouts = Storage.loadP(AppState.currentProfile, 'workouts', (typeof Workouts!=='undefined'?Workouts.defaults():[]));
   AppState.logg = Storage.loadP(AppState.currentProfile, 'logg', []);
 }
