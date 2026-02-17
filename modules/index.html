@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="theme-color" content="#ffffff"/>
+  <title>INTZ – Basic v1.2.0</title>
+  <link rel="manifest" href="./manifest.webmanifest"/>
+  <link rel="icon" href="./assets/icons/icon-192.png"/>
+  <link rel="stylesheet" href="./app.css"/>
+</head>
+<body>
+  <header class="topbar" role="banner">
+    <div class="brand" tabindex="0" title="Til dashboard" onclick="location.hash='#/dashboard'">
+      <img src="./assets/logo.svg" alt="INTZ"/>
+      <strong>INTZ</strong>
+    </div>
+    <div class="modulnavn" id="modulnavn">Dashboard</div>
+    <div class="status">
+      <button id="btn-hr" class="status-icon" title="Koble til pulssensor" aria-pressed="false">❤</button>
+      <button id="btn-ftms" class="status-icon" title="Koble til tredemølle" aria-pressed="false">🏃‍♂️</button>
+      <button id="btn-wake" class="status-icon" title="Skjerm på" aria-pressed="false">☀️</button>
+      <time id="clock" class="clock" aria-live="polite"></time>
+      <button class="hamburger" id="hamburger" aria-label="Meny" aria-expanded="false">☰</button>
+    </div>
+    <nav class="nav" id="nav">
+      <button class="nav-btn" onclick="location.hash='#/dashboard'">Dashboard</button>
+      <button class="nav-btn" onclick="location.hash='#/workout'">Økt</button>
+      <button class="nav-btn" onclick="location.hash='#/editor'">Editor</button>
+      <button class="nav-btn" onclick="location.hash='#/pi'">PI</button>
+      <button class="nav-btn" onclick="location.hash='#/log'">Logg</button>
+    </nav>
+  </header>
+
+  <main id="app" class="app" tabindex="-1" aria-live="polite"></main>
+
+  <footer class="footer"><small>INTZ Basic v1.2.0 – multi‑profil, PI/Slope, resultatskjerm, FTMS‑robusthet.</small></footer>
+
+  <script src="./components/ui.js"></script>
+  <script src="./components/storage.js"></script>
+  <script src="./components/bt.js"></script>
+  <script src="./components/graph.js"></script>
+  <script src="./components/workouts.js"></script>
+  <script src="./modules/dashboard.js"></script>
+  <script src="./modules/editor.js"></script>
+  <script src="./modules/workout.js"></script>
+  <script src="./modules/result.js"></script>
+  <script src="./modules/settings.js"></script>
+  <script src="./modules/log.js"></script>
+  <script src="./modules/pi.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

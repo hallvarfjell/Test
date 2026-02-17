@@ -1,0 +1,1 @@
+const Settings = { render(el, st){ el.innerHTML=''; const card = UI.h('div',{class:'card'}); card.append(UI.h('h2',{},'Innstillinger (flyttes til PI seinere)')); const info = UI.h('div',{}, 'Du kan bruke PI-modulen for parametre.'); el.append(UI.h('h1',{class:'h1'},'Innstillinger'), card, info); } };
