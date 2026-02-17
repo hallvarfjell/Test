@@ -4,7 +4,7 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="theme-color" content="#ffffff"/>
-  <title>INTZ – Basic v1.2.0</title>
+  <title>INTZ – Basic v1.3.0</title>
   <link rel="manifest" href="./manifest.webmanifest"/>
   <link rel="icon" href="./assets/icons/icon-192.png"/>
   <link rel="stylesheet" href="./app.css"/>
@@ -17,6 +17,7 @@
     </div>
     <div class="modulnavn" id="modulnavn">Dashboard</div>
     <div class="status">
+      <button id="btn-session" class="status-icon" title="Øktstatus" aria-pressed="false">■</button>
       <button id="btn-hr" class="status-icon" title="Koble til pulssensor" aria-pressed="false">❤</button>
       <button id="btn-ftms" class="status-icon" title="Koble til tredemølle" aria-pressed="false">🏃‍♂️</button>
       <button id="btn-wake" class="status-icon" title="Skjerm på" aria-pressed="false">☀️</button>
@@ -34,7 +35,7 @@
 
   <main id="app" class="app" tabindex="-1" aria-live="polite"></main>
 
-  <footer class="footer"><small>INTZ Basic v1.2.0 – multi‑profil, PI/Slope, resultatskjerm, FTMS‑robusthet.</small></footer>
+  <footer class="footer"><small>INTZ Basic v1.3.0 – multi‑profil, PI/Slope, bakgrunnsøkter, rik resultatside, FTMS‑fix.</small></footer>
 
   <script src="./components/ui.js"></script>
   <script src="./components/storage.js"></script>
@@ -45,7 +46,6 @@
   <script src="./modules/editor.js"></script>
   <script src="./modules/workout.js"></script>
   <script src="./modules/result.js"></script>
-  <script src="./modules/settings.js"></script>
   <script src="./modules/log.js"></script>
   <script src="./modules/pi.js"></script>
   <script src="./app.js"></script>

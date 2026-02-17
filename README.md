@@ -1,6 +1,7 @@
-# INTZ Basic v1.2.0
+# INTZ Basic v1.3.0
 
-- **Profiler**: Hallvar/Monika-knapper på Dashboard. Lagrer/leser `settings`, `workouts`, `logg` per profil.
-- **Økt**: PI + Slope (%) KPI, vann/karbo-knapper, fart-klikkskifte (km/t ⇄ min/km), hurtigknapper 10/15 km/t, nav-guard ved aktiv økt, kontinuerlig fartsgraf, resultatskjerm ved slutt.
-- **Editor**: Drag‑and‑drop omrokering + ↑/↓.
-- **FTMS**: robust søk (acceptAllDevices + optionalServices), flagg-sjekk og `null` ved manglende felter.
+- **FTMS fix**: Leser `Instantaneous Speed` som *obligatorisk* (0.01 km/t) + `Inclination` når flagg bit3 er satt.
+- **Bakgrunnsøkter**: Økt fortsetter selv om du navigerer bort; topbar viser status (■/▶/⏸) og tar deg tilbake til Økt.
+- **UI**: Slope under Puls, større +-knapper for fart/stigning, PI‑klikk åpner PI‑modul (Lukk→Økt), hurtigknapper 10/15 km/t.
+- **PI**: Innstillinger flyttet hit (HRmax, LT1/LT2, drift, svetteslope, vekt). Økt henter PI_total herfra.
+- **Resultat**: Rik side med tid, distanse, vann/karbo, HR‑ og fartsgrafer.
