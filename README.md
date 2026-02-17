@@ -1,5 +1,6 @@
-# INTZ Basic v1.1.0
+# INTZ Basic v1.2.0
 
-- **Øktmodul**: PI + Slope (Slope = (avg HR 10s − avg HR 60s)/avg HR 60s), kontinuerlig fartsgraf (og 0 i pauser), større øktpanel, neste/deretter synlig før start.
-- **Editor**: flytt blokker opp/ned (endre rekkefølge).
-- **BLE/FTMS**: bedre reconnect og null-sikker parsing (flags). FTMS valgfritt; manuell justering alltid mulig.
+- **Profiler**: Hallvar/Monika-knapper på Dashboard. Lagrer/leser `settings`, `workouts`, `logg` per profil.
+- **Økt**: PI + Slope (%) KPI, vann/karbo-knapper, fart-klikkskifte (km/t ⇄ min/km), hurtigknapper 10/15 km/t, nav-guard ved aktiv økt, kontinuerlig fartsgraf, resultatskjerm ved slutt.
+- **Editor**: Drag‑and‑drop omrokering + ↑/↓.
+- **FTMS**: robust søk (acceptAllDevices + optionalServices), flagg-sjekk og `null` ved manglende felter.

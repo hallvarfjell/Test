@@ -1,3 +1,19 @@
-// PI module view + compute (kan finpusses senere)
-const PI = { compute(inputs){ const hr = inputs.hr || 0, hrmax = inputs.hrmax || 190; const spd = inputs.speedKmh || 0, inc = inputs.inclinePct || 0; const lt1 = inputs.lt1 || 135, lt2 = inputs.lt2 || 160; const load = spd * (1 + Math.max(0, inc)/100); const hrScore = (hr<=0)? 0 : Math.min(1, Math.max(0, (hr - lt1)/Math.max(1,(lt2-lt1)))); const raw = (load*4) * (0.6 + 0.4*hrScore); return Math.max(0, Math.min(100, Math.round(raw))); } };
-const PIMod = { render(el, st){ el.innerHTML=''; const card = UI.h('div',{class:'card'}); card.append(UI.h('h2',{},'PI – Performance Index (forslag v0)')); const p = UI.h('p',{}, 'PI beregnes nå som et enkelt mål basert på fart*(1+stigning) og puls relativt til LT1–LT2. Dette finjusteres senere.'); const demo = UI.h('div',{class:'controls'}); const spd = UI.h('input',{class:'input',type:'number',step:'0.1',value:String(st.tm.speed||10)}); const inc = UI.h('input',{class:'input',type:'number',step:'1',value:String(st.tm.incline||1)}); const hr = UI.h('input',{class:'input',type:'number',value:String(st.hr.bpm||140)}); const out = UI.h('div',{class:'big'}, 'PI: 0'); function recalc(){ const val = PI.compute({ hr:parseInt(hr.value)||0, hrmax: st.settings.hrmax, speedKmh: parseFloat(spd.value)||0, inclinePct: parseFloat(inc.value)||0, lt1: st.settings.lt1, lt2: st.settings.lt2 }); out.textContent = 'PI: '+val; } [spd,inc,hr].forEach(i=>i.addEventListener('input', recalc)); recalc(); demo.append(UI.h('label',{},'Fart'), spd, UI.h('label',{},'Stigning %'), inc, UI.h('label',{},'Puls'), hr); card.append(p, demo, out); el.append(UI.h('h1',{class:'h1'},'PI'), card); } };
+// PI-modul – iterasjon v0.2
+const PI = (function(){
+  const cfg = { HRmax:190, HRrest:50, LT1:135, LT2:160, RPE_LT1:4, RPE_LT2:7, drift:0.003, beta:0.012, T0:12, met_eff:0.25, sweat_temp_slope:0.03, sweat_baseC:20, dehyd_thresh:0.5, dehyd_gamma:0.15, wHR:2, wRPE:1, wFB:1, mass:75 };
+  let cumWaterL=0;
+  function setFromSettings(s){ if(!s) return; cfg.HRmax=s.hrmax||cfg.HRmax; cfg.LT1=s.lt1||cfg.LT1; cfg.LT2=s.lt2||cfg.LT2; }
+  function percentHRR(hr){ return (hr - cfg.HRrest)/(cfg.HRmax - cfg.HRrest); }
+  function hrCorrected(hr, tMin){ return hr/(1+cfg.drift*tMin); }
+  function expectedScalars(){ const p1=percentHRR(cfg.LT1), p2=percentHRR(cfg.LT2); return { pHRR_exp:(p1+p2)/2, RPE_exp:(cfg.RPE_LT1+cfg.RPE_LT2)/2 } }
+  function sweatLph(tempC){ const add = tempC>cfg.sweat_baseC ? cfg.sweat_temp_slope*(tempC-cfg.sweat_baseC) : 0; return 0.9 + add; }
+  function dehydPct(cSweat){ return 100*((cSweat - cumWaterL)/cfg.mass); }
+  function PI_FB(dPct){ const excess=Math.max(0, dPct-cfg.dehyd_thresh); return 1 + cfg.dehyd_gamma*Math.pow(excess,2); }
+  function computeTot(inputs){ setFromSettings(inputs.settings); const tMin=(inputs.elapsedSec||0)/60; const HRc = hrCorrected(inputs.hr||0, tMin); const pAct = percentHRR(HRc); const {pHRR_exp, RPE_exp} = expectedScalars(); const PI_HR = pHRR_exp? (pAct/pHRR_exp): null; const PI_RPE = RPE_exp? ((inputs.rpe||6)/RPE_exp): null; const Lph=sweatLph(inputs.tempC||20); const dPct=dehydPct(inputs.cumSweatL||0); const pFB=PI_FB(dPct); const wSum=cfg.wHR+cfg.wRPE+cfg.wFB; const tot = (PI_HR&&PI_RPE&&pFB) ? Math.pow(Math.pow(PI_HR,cfg.wHR)*Math.pow(PI_RPE,cfg.wRPE)*Math.pow(pFB,cfg.wFB), 1/wSum) : null; return {PI_HR, PI_RPE, pFB, PI_tot:tot, Lph}; }
+  function addWater(dl){ cumWaterL += (dl||0)/10; return cumWaterL; }
+  return { computeTot, addWater };
+})();
+
+const PIMod = { render(el, st){ el.innerHTML=''; const card = UI.h('div',{class:'card'}); card.append(UI.h('h2',{},'PI – Performance Index'));
+ card.append(UI.h('p',{}, 'PI-total beregnes her og brukes i Økt. Vi kan flytte alle parametre hit og fjerne Innstillinger senere.'));
+ el.append(UI.h('h1',{class:'h1'},'PI'), card); } };

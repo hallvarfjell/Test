@@ -1,29 +1,39 @@
-// INTZ Basic v1.1.0 app
+// INTZ Basic v1.2.0 app
 const AppState = {
-  settings: Storage.load('settings', { vekt:null, hrmax:190, lt1:135, lt2:160, soner:[115,134,145,164,174], tema:'light' }),
+  currentProfile: Storage.load('profile','Hallvar'),
+  settings: null,
   hr: {connected:false, bpm:0},
   tm: {connected:false, speed:0, incline:0, manualUntil:0},
   wakeLock: null,
-  workouts: Storage.load('workouts', (typeof Workouts!=='undefined'?Workouts.defaults():[])),
-  logg: Storage.load('logg', []),
+  workouts: null,
+  logg: null,
   plan: null
 };
+
+function reloadStateForProfile(){
+  AppState.settings = Storage.loadP(AppState.currentProfile, 'settings', { vekt:null, hrmax:190, lt1:135, lt2:160, soner:[115,134,145,164,174], tema:'light' });
+  AppState.workouts = Storage.loadP(AppState.currentProfile, 'workouts', (typeof Workouts!=='undefined'?Workouts.defaults():[]));
+  AppState.logg = Storage.loadP(AppState.currentProfile, 'logg', []);
+}
+function setProfile(name){ AppState.currentProfile = name; Storage.save('profile', name); reloadStateForProfile(); router(); }
+reloadStateForProfile();
 
 const Routes = {
   '#/dashboard': Dashboard.render,
   '#/editor': Editor.render,
   '#/workout': Workout.render,
-  '#/settings': Settings.render,
+  '#/result': Result.render,
   '#/pi': PIMod.render,
+  '#/settings': Settings.render,
   '#/log': LogMod.render,
 };
 
 function setModuleName(name){ document.getElementById('modulnavn').textContent = name; }
 
 function router(){
-  const r = location.hash || '#/dashboard';
+  const r = location.hash.split('?')[0] || '#/dashboard';
   (Routes[r]||Dashboard.render)(document.getElementById('app'), AppState);
-  const name = (r==='#/dashboard'?'Dashboard':r==='#/editor'?'Editor':r==='#/workout'?'Økt':r==='#/settings'?'Innstillinger':r==='#/pi'?'PI':'Logg');
+  const name = (r==='#/dashboard'?'Dashboard':r==='#/editor'?'Editor':r==='#/workout'?'Økt':r==='#/pi'?'PI':r==='#/settings'?'Innstillinger':'Logg');
   setModuleName(name);
 }
 
