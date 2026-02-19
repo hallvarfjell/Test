@@ -4,7 +4,7 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="theme-color" content="#ffffff"/>
-  <title>INTZ – Basic v1.3.1</title>
+  <title>INTZ – Basic v1.3.2</title>
   <link rel="manifest" href="./manifest.webmanifest"/>
   <link rel="icon" href="./assets/icons/icon-192.png"/>
   <link rel="stylesheet" href="./app.css"/>
@@ -12,8 +12,7 @@
 <body>
   <header class="topbar" role="banner">
     <div class="brand" tabindex="0" title="Til dashboard" onclick="location.hash='#/dashboard'">
-      <img src="./assets/logo.svg" alt="INTZ"/>
-      <strong>INTZ</strong>
+      <img id="brand-logo" src="./assets/logo.png" alt="INTZ"/>
     </div>
     <div class="modulnavn" id="modulnavn">Dashboard</div>
     <div class="status">
@@ -26,8 +25,8 @@
     </div>
     <nav class="nav" id="nav">
       <button class="nav-btn" onclick="location.hash='#/dashboard'">Dashboard</button>
-      <button class="nav-btn" onclick="location.hash='#/workout'">Økt</button>
       <button class="nav-btn" onclick="location.hash='#/editor'">Editor</button>
+      <button class="nav-btn" onclick="location.hash='#/workout'">Økt</button>
       <button class="nav-btn" onclick="location.hash='#/pi'">PI</button>
       <button class="nav-btn" onclick="location.hash='#/log'">Logg</button>
     </nav>
@@ -35,7 +34,7 @@
 
   <main id="app" class="app" tabindex="-1" aria-live="polite"></main>
 
-  <footer class="footer"><small>INTZ Basic v1.3.1 – større pulspanel, Watt-estimat, bakgrunns‑økt m/ robuste kontroller, full PI‑demo, PI‑graf.</small></footer>
+  <footer class="footer"><small>INTZ Basic v1.3.2 – menylogo, dashboard‑forbedringer, slett økt, backup/import, forbedret editor.</small></footer>
 
   <script src="./components/ui.js"></script>
   <script src="./components/storage.js"></script>
