@@ -1,210 +1,181 @@
 
-// Økt-modul v1.3.4 (patch for v1.3.2)
-// - Ny ytelseslayout: Puls/HR%, Slope, Fart (km/t↔min/km) med ± og 10/15, Stigning med ±,
-//   Watt (est.) ↔ W/kg, PI og ΔHR fra PI-modulen
-// - Kombinert graf HR(90–190) + Fart(0–20)
-// - Statistikk kompakt + snittWatt per drag
-// - RPE ± per drag (lagres)
-// - FTMS stigning: lytter både på 0x2ACD og 0x2ADA
+// Workout module v1.3.6 – new layout, PI & ΔHR, power toggle W/Wkg, pace toggle, fixed graph scales, RPE per drag
 
-const Workout = (function(){
-  const engine = { running:false, paused:false, timer:null, seq:[], idx:0, left:0,
-    tTot:0, tDrag:0, dist:0,
-    speedUnit:'kmh', wattUnit:'W',
-    hrBuf:[], seriesHr:[], seriesSpd:[], seriesWatt:[], seriesDrift:[],
-    rpePerDrag:{}, curRPE:6,
-  };
+const WorkoutEngine = (function(){
+  const S = { running:false, paused:false, timer:null, plan:null, seq:[], idx:0, left:0, tTot:0, tDrag:0,
+              dist:0, hrBuf:[], speedUnit:'kmh', powerUnit:'W',
+              hrSamples:[], spdSamples:[], powSamples:[],
+              seriesHr:[], seriesSpd:[], seriesInc:[],
+              perDrag:[], rpeCur:6 };
 
-  function expand(blocks){ const out=[]; (blocks||[]).forEach(b=>{
-    if(['Oppvarming','Pause','Nedjogg'].includes(b.kind)) out.push({kind:b.kind, dur:b.dur});
-    else if(b.kind==='Intervall'){ for(let i=1;i<=b.reps;i++){ out.push({kind:'Arbeid', dur:b.work, rep:i, reps:b.reps}); if(b.rest>0) out.push({kind:'Pause', dur:b.rest}); } }
-    else if(b.kind==='Serie'){ for(let s=1;s<=b.series;s++){ for(let i=1;i<=b.reps;i++){ out.push({kind:'Arbeid', dur:b.work, rep:i, reps:b.reps, set:s, sets:b.series}); if(b.rest>0) out.push({kind:'Pause', dur:b.rest}); } if(s<b.series && b.seriesRest) out.push({kind:'Pause', dur:b.seriesRest}); } }
-  }); return out; }
+  function expand(blocks){
+    const out=[]; (blocks||[]).forEach(b=>{
+      if(['Oppvarming','Nedjogg','Pause'].includes(b.kind)) out.push({kind:b.kind, dur:b.dur});
+      else if(b.kind==='Intervall'){
+        for(let i=1;i<=b.reps;i++){ out.push({kind:'Arbeid', dur:b.work, rep:i, reps:b.reps}); if(b.rest>0) out.push({kind:'Pause', dur:b.rest}); }
+      } else if(b.kind==='Serie'){
+        for(let s=1;s<=b.series;s++){
+          for(let i=1;i<=b.reps;i++){ out.push({kind:'Arbeid', dur:b.work, rep:i, reps:b.reps, set:s, sets:b.series}); if(b.rest>0) out.push({kind:'Pause', dur:b.rest}); }
+          if(s<b.series && b.seriesRest) out.push({kind:'Pause', dur:b.seriesRest});
+        }
+      }
+    }); return out;
+  }
+  function fmtSpd(kmh){ if(S.speedUnit==='kmh') return `${kmh.toFixed(1)} km/t`; if(kmh<=0) return '–'; const pace=60/(kmh); const m=Math.floor(pace), s=Math.round((pace-m)*60); return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')} min/km`; }
+  function estWatt(speedKmh, inclinePct){ const v=(speedKmh||0)/3.6; const i=(inclinePct||0)/100; const met=(AppState.settings?.met_eff)||0.25; const mass=(AppState.settings?.mass)||75; const Wkg=4.185*v + (9.81*v*i)/met; const shoe=1-((AppState.settings?.shoe_gain_pct||0)/100); const tm=(AppState.settings?.tm_cal||1); const WkgAdj = Wkg*shoe*tm; return { Wkg:WkgAdj, W: WkgAdj*mass } }
 
-  function fmtSpd(kmh, unit){ if(unit==='kmh') return `${kmh.toFixed(1)} km/t`; if(kmh<=0) return '–'; const pace=60/(kmh); const m=Math.floor(pace), s=Math.round((pace-m)*60); return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')} min/km`; }
+  function updateUI(){
+    const cur=S.seq[S.idx]||{}; const spdNow = cur.kind==='Pause'? 0 : (AppState.tm?.speed||0); const incNow = AppState.tm?.incline||0; const hrNow = AppState.hr?.bpm||0;
+    // big tiles
+    const hrEl = document.getElementById('wk_hr'); if(hrEl) hrEl.textContent = String(hrNow||0);
+    const hrp = document.getElementById('wk_hrp'); if(hrp){ const r=AppState.settings?.hrrest||50, m=AppState.settings?.hrmax||190; const p=(hrNow-r)/Math.max(1,(m-r)); hrp.textContent = isFinite(p)? `${Math.round(p*100)}%` : '–'; }
+    const spd = document.getElementById('wk_spd'); if(spd) spd.textContent = fmtSpd(spdNow);
+    const inc = document.getElementById('wk_inc'); if(inc) inc.textContent = `${Math.round(incNow)}%`;
 
-  function estWatt(speedKmh, inclinePct){ const v=(speedKmh||0)/3.6; const i=(inclinePct||0)/100; const eta=(PI.load().met_eff||0.25); const mass=(PI.load().mass||75);
-    const Pflat_Wkg=4.185*v; const Pclimb_Wkg=(9.81*v*i)/eta; const Wkg=Pflat_Wkg+Pclimb_Wkg; return {Wkg, W: Wkg*mass}; }
+    // PI & dHR
+    try{
+      const res = (typeof PI!=='undefined')? PI.compute(performance.now(), { prevTime:null,tSec:0, hr:hrNow, speedKmh:spdNow, inclinePct:incNow, tempC:20, rpe:S.rpeCur, cumSweatL:0 }) : null;
+      const piEl=document.getElementById('wk_pi'); if(piEl) piEl.textContent = res&&res.PI? res.PI.toFixed(2) : '–';
+      const dEl=document.getElementById('wk_dhr'); if(dEl) dEl.textContent = res? String(Math.round(res.dHR||0)) : '0';
+    }catch(e){}
 
-  function drawLayout(el, plan){
-    el.innerHTML='';
-    const grid = UI.h('div',{});
+    // power
+    const p = estWatt(spdNow, incNow); const wEl=document.getElementById('wk_pow'); if(wEl){ wEl.textContent = (S.powerUnit==='W')? `${Math.round(p.W)} W` : `${p.Wkg.toFixed(2)} W/kg`; }
 
-    // --- ytelsespanel ---
-    const panel = UI.h('div',{class:'card', style:'display:grid;grid-template-columns:1fr 1.2fr 1fr;gap:.75rem'});
+    // timers
+    const eTimer=document.getElementById('wk_timer'); if(eTimer) eTimer.textContent = UI.fmtTime(S.left);
+    const eTot=document.getElementById('wk_tTot'); if(eTot) eTot.textContent = UI.fmtTime(S.tTot);
+    const eDrag=document.getElementById('wk_tDrag'); if(eDrag) eDrag.textContent = UI.fmtTime(S.tDrag);
+    const eDist=document.getElementById('wk_dist'); if(eDist) eDist.textContent = S.dist.toFixed(2);
 
-    // venstre – Puls/Slope
-    const left = UI.h('div',{});
-    left.append(
-      UI.h('div',{class:'small'},'Puls'),
-      UI.h('div',{class:'h1',id:'hrVal'},'0'),
-      UI.h('div',{class:'small',id:'hrPct'},'0% av HRmax'),
-      UI.h('div',{class:'small',style:'margin-top:.5rem'},'Slope'),
-      UI.h('div',{class:'h1',id:'slopeVal'},'0.00%')
-    );
-
-    // midt – Fart/Stigning + kontroller
-    const mid = UI.h('div',{});
-    const spdVal = UI.h('div',{class:'h1',id:'spdVal',style:'cursor:pointer'},'0.0 km/t');
-    const incVal = UI.h('div',{class:'h1',id:'incVal'},'0%');
-    const spdCtr = UI.h('div',{class:'controls'},
-      UI.h('button',{class:'btn',id:'spdDec'},'−'), UI.h('button',{class:'btn',id:'spdInc'},'+'),
-      UI.h('button',{class:'btn',id:'q10'},'10 km/t'), UI.h('button',{class:'btn',id:'q15'},'15 km/t')
-    );
-    const incCtr = UI.h('div',{class:'controls'},
-      UI.h('button',{class:'btn',id:'incDec'},'−'), UI.h('button',{class:'btn',id:'incInc'},'+')
-    );
-    mid.append(UI.h('div',{class:'small'},'Fart'), spdVal, UI.h('div',{class:'small'},'Stigning'), incVal, spdCtr, incCtr);
-
-    // høyre – Watt/PI/ΔHR + drikke/karbo + RPE
-    const right = UI.h('div',{});
-    const wattVal = UI.h('div',{class:'h1',id:'wattVal',style:'cursor:pointer'},'0 W');
-    const piVal = UI.h('div',{class:'h1',id:'piVal',style:'cursor:pointer'},'1.00');
-    const dhrVal = UI.h('div',{class:'h1',id:'dhrVal'},'0');
-    const rpeRow = UI.h('div',{class:'controls'},
-      UI.h('button',{class:'btn',id:'rpeMinus'},'RPE −'), UI.h('div',{id:'rpeVal',class:'h1'},'6'), UI.h('button',{class:'btn',id:'rpePlus'},'RPE +')
-    );
-    right.append(
-      UI.h('div',{class:'small'},'Watt (trykk for W ↔ W/kg)'), wattVal,
-      UI.h('div',{class:'small',style:'margin-top:.5rem'},'PI (trykk for detalj)'), piVal,
-      UI.h('div',{class:'small',style:'margin-top:.5rem'},'HR‑drift Δ (bpm)'), dhrVal,
-      UI.h('div',{class:'controls',style:'margin-top:.5rem'}, UI.h('button',{class:'btn',id:'btnWater'},'🥛'), UI.h('button',{class:'btn',id:'btnCarb'},'🍌')),
-      UI.h('div',{class:'small',style:'margin-top:.5rem'},'Opplevd anstrengelse (RPE) per drag'), rpeRow
-    );
-
-    panel.append(left, mid, right);
-
-    // --- graf ---
-    const graphCard = UI.h('div',{class:'card'}); const gDiv = UI.h('div',{style:'height:260px'}); graphCard.append(gDiv); const graph = new Graph.Combined(gDiv);
-
-    // --- øktpanel kontroller ---
-    const flow = UI.h('div',{class:'card'});
-    const phaseNow = UI.h('div',{class:'list-item',id:'phaseNow'},'–');
-    const phaseNext = UI.h('div',{class:'small',id:'phaseNext'},'');
-    const timer = UI.h('div',{class:'h1',id:'timer'},'00:00');
-    const ctrl = UI.h('div',{class:'controls'},
-      UI.h('button',{class:'btn primary',id:'start'},'Start'),
-      UI.h('button',{class:'btn',id:'pause'},'Pause'),
-      UI.h('button',{class:'btn',id:'prev'},'⟵'),
-      UI.h('button',{class:'btn',id:'next'},'⟶'),
-      UI.h('button',{class:'btn',id:'save'},'Lagre'),
-      UI.h('button',{class:'btn danger',id:'discard'},'Forkast')
-    );
-    flow.append(UI.h('h3',{},plan.name), phaseNow, phaseNext, timer, ctrl);
-
-    // --- stats kompakt ---
-    const stats = UI.h('div',{class:'card'});
-    const tbl = UI.h('table',{class:'table'});
-    tbl.innerHTML='<tr><th>Param</th><th>Verdi</th></tr>'+
-      '<tr><td>Distanse</td><td id="stDist">0.00 km</td></tr>'+
-      '<tr><td>Totaltid</td><td id="stTot">00:00</td></tr>'+
-      '<tr><td>Dragtid</td><td id="stDrag">00:00</td></tr>'+
-      '<tr><td>Snitt HR (drag)</td><td id="stAvgHR">-</td></tr>'+
-      '<tr><td>Snitt fart (drag)</td><td id="stAvgSpd">-</td></tr>'+
-      '<tr><td>Snitt Watt (drag)</td><td id="stAvgW">-</td></tr>';
-    stats.append(UI.h('h3',{},'Statistikk (kompakt)'), tbl);
-
-    el.append(panel, graphCard, flow, stats);
-
-    return {graph};
+    // phase labels
+    const curLbl = document.getElementById('wk_phase'); if(curLbl){ let base=cur.kind||'–'; if(cur.kind==='Arbeid'&&cur.rep){ base+=` ${cur.rep}/${cur.reps}${cur.set?`, serie ${cur.set}/${cur.sets||1}`:''}`; } curLbl.textContent=base; }
+    const nextLbl=document.getElementById('wk_next'); if(nextLbl){ const n=S.seq[S.idx+1]; nextLbl.textContent = n? `Neste: ${n.kind}${n.rep?` ${n.rep}/${n.reps}`:''}` : ''; }
   }
 
-  // helpers
-  function label(x){ let base=x.kind; if(x.kind==='Arbeid'&&x.rep) base+=` drag ${x.rep}/${x.reps}${x.set?`, serie ${x.set}/${x.sets||1}`:''}`; return base; }
-
-  function setPhase(){ const cur=engine.seq[engine.idx];
-    const eNow=document.getElementById('phaseNow'); if(eNow) eNow.textContent=cur?label(cur):'Ferdig';
-    const eNext=document.getElementById('phaseNext'); if(eNext) eNext.textContent = engine.seq[engine.idx+1]? ('Neste: '+label(engine.seq[engine.idx+1])):'';
-    engine.left = cur? cur.dur : 0; engine.tDrag=0; }
-
-  function updateUI(g){ const s=PI.load(); const hr=AppState.hr?.bpm||0; const inc=AppState.tm?.incline||0; const spd=AppState.tm?.speed||0;
-    const hrMax=s.HRmax||190; const pct=Math.round((hr/hrMax)*100);
-    const hrEl=document.getElementById('hrVal'); if(hrEl) hrEl.textContent=String(hr);
-    const hrp=document.getElementById('hrPct'); if(hrp) hrp.textContent=`${pct}% av HRmax`;
-    const sl=document.getElementById('slopeVal'); if(sl){ // dHR vises annet sted; slope kan tolkes som HR-slope vs tid – her viser vi TD slope (0.00%)
-      // i Økt: behold «Slope» som HR-slope om ønsket senere; nå viser vi møllestigning separat
-      const dHR = engine.seriesDrift.length? engine.seriesDrift[engine.seriesDrift.length-1].dHR : 0;
-      sl.textContent = (dHR? (dHR.toFixed(2)+' bpm drift') : '0.00%');
-    }
-    const spdTxt = document.getElementById('spdVal'); if(spdTxt) spdTxt.textContent = fmtSpd(spd, engine.speedUnit);
-    const incTxt = document.getElementById('incVal'); if(incTxt) incTxt.textContent = `${Math.round(inc)}%`;
-    const pw = estWatt(spd, inc); const wVal = document.getElementById('wattVal'); if(wVal) wVal.textContent = (engine.wattUnit==='W'? `${Math.round(pw.W)} W` : `${pw.Wkg.toFixed(2)} W/kg`);
-    // PI compute
-    const res = PI.compute(performance.now(), { prevTime:null, tSec:engine.tTot, hr:hr, speedKmh:spd, inclinePct:inc, tempC:20, rpe:engine.curRPE, cumSweatL:0 });
-    const piEl=document.getElementById('piVal'); if(piEl) piEl.textContent = (res.PI? res.PI.toFixed(2):'1.00');
-    const dhrEl=document.getElementById('dhrVal'); if(dhrEl) dhrEl.textContent = String(Math.round(res.dHR||0));
-    // series
-    engine.seriesHr.push({t:Date.now()/1000,bpm:hr}); engine.seriesSpd.push({t:Date.now()/1000,kmh:spd}); engine.seriesWatt.push({t:Date.now()/1000,Wkg:res.Pd_Wkg||pw.Wkg,W:pw.W}); engine.seriesDrift.push({t:Date.now()/1000,dHR:res.dHR||0, parts:res.drift?.parts||{}});
-    g.addHR(hr); g.addSPD(spd);
-    // Dist/time
-    engine.dist += spd/3600; const dEl=document.getElementById('stDist'); if(dEl) dEl.textContent = engine.dist.toFixed(2)+' km';
-    const tEl=document.getElementById('stTot'); if(tEl) tEl.textContent=UI.fmtTime(engine.tTot);
-    const tdEl=document.getElementById('stDrag'); if(tdEl) tdEl.textContent=UI.fmtTime(engine.tDrag);
+  function tick(){ if(S.paused||!S.running) return; S.tTot++; const cur=S.seq[S.idx]; const spdNow = cur.kind==='Pause'?0:(AppState.tm?.speed||0); const incNow=AppState.tm?.incline||0; const hrNow=AppState.hr?.bpm||0;
+    // accumulate
+    S.dist += spdNow/3600; S.seriesSpd.push({t:Date.now()/1000, kmh:spdNow}); S.seriesInc.push({t:Date.now()/1000, pct:incNow}); if(hrNow) S.seriesHr.push({t:Date.now()/1000, bpm:hrNow});
+    if(cur.kind==='Arbeid'){ if(hrNow) S.hrSamples.push(hrNow); S.spdSamples.push(spdNow); const p=estWatt(spdNow,incNow); S.powSamples.push(p.W); S.tDrag++; }
+    drawGraph(); updateUI(); S.left--; if(S.left<=0){ if(cur.kind==='Arbeid'){ const aHR=Math.round(S.hrSamples.reduce((a,b)=>a+b,0)/(S.hrSamples.length||1)); const aSpd=(S.spdSamples.reduce((a,b)=>a+b,0)/(S.spdSamples.length||1)); const aW=(S.powSamples.reduce((a,b)=>a+b,0)/(S.powSamples.length||1)); S.perDrag.push({hr:aHR, spd:+aSpd.toFixed(1), watt:+(aW||0).toFixed(0), rpe:S.rpeCur}); S.hrSamples.length=0; S.spdSamples.length=0; S.powSamples.length=0; }
+      S.idx++; setPhase(); }
   }
 
-  function perDragStats(){ // set snitt i siste arbeid
-    const cur = engine.seq[engine.idx]; if(!cur || cur.kind!=='Arbeid') return;
-    const win=engine.seriesHr.slice(-engine.left-1); // rough; we compute on boundary below
+  function setPhase(){ const cur=S.seq[S.idx]; if(!cur){ finish(true); return; } S.left=cur.dur; updateUI(); }
+  function start(){ if(S.running) return; S.running=true; S.paused=false; if(!S.timer) S.timer=setInterval(tick,1000); AppState.session.running=true; AppState.session.paused=false; enableButtons(); updateUI(); }
+  function pause(){ S.paused=!S.paused; AppState.session.paused=S.paused; const b=document.getElementById('wk_pause'); if(b) b.textContent = S.paused?'Gjenoppta':'Pause'; }
+  function next(){ S.idx=Math.min(S.seq.length, S.idx+1); setPhase(); }
+  function prev(){ S.idx=Math.max(0, S.idx-1); setPhase(); }
+  function finish(saved){ clearInterval(S.timer); S.timer=null; S.running=false; S.paused=false; AppState.session.running=false; AppState.session.paused=false; let sid=null; if(saved){ const session={id:'s_'+Date.now(), name:S.plan.name, endedAt:Date.now(), dist:S.dist, total:S.tTot, seq:S.seq, perDrag:S.perDrag, hrSeries:S.seriesHr, spdSeries:S.seriesSpd, incSeries:S.seriesInc, notes:''}; const st=AppState; st.logg=st.logg||[]; st.logg.push(session); Storage.saveP(AppState.currentProfile,'logg',st.logg); sid=session.id; } location.hash = saved? ('#/result?id='+sid) : '#/dashboard'; }
+
+  function attachHandlers(){
+    const e=document; const q=id=>e.getElementById(id);
+    q('wk_start')?.addEventListener('click', start);
+    q('wk_pause')?.addEventListener('click', pause);
+    q('wk_prev')?.addEventListener('click', prev);
+    q('wk_next')?.addEventListener('click', next);
+    q('wk_save')?.addEventListener('click', ()=>finish(true));
+    q('wk_discard')?.addEventListener('click', ()=>{ if(confirm('Forkaste uten å lagre?')) finish(false); });
+    q('wk_spd_toggle')?.addEventListener('click', ()=>{ S.speedUnit = (S.speedUnit==='kmh'?'pace':'kmh'); updateUI(); });
+    q('wk_pow')?.addEventListener('click', ()=>{ S.powerUnit = (S.powerUnit==='W'?'Wkg':'W'); updateUI(); });
+    q('wk_spdDec')?.addEventListener('click', ()=>{ AppState.tm.speed=Math.max(0,(AppState.tm.speed||0)-0.1); AppState.tm.manualUntil=Date.now()+4000; updateUI(); });
+    q('wk_spdInc')?.addEventListener('click', ()=>{ AppState.tm.speed=(AppState.tm.speed||0)+0.1; AppState.tm.manualUntil=Date.now()+4000; updateUI(); });
+    q('wk_incDec')?.addEventListener('click', ()=>{ AppState.tm.incline=Math.max(0,(AppState.tm.incline||0)-1); AppState.tm.manualUntil=Date.now()+4000; updateUI(); });
+    q('wk_incInc')?.addEventListener('click', ()=>{ AppState.tm.incline=(AppState.tm.incline||0)+1; AppState.tm.manualUntil=Date.now()+4000; updateUI(); });
+    q('wk_q10')?.addEventListener('click', ()=>{ AppState.tm.speed=10; AppState.tm.manualUntil=Date.now()+4000; updateUI(); });
+    q('wk_q15')?.addEventListener('click', ()=>{ AppState.tm.speed=15; AppState.tm.manualUntil=Date.now()+4000; updateUI(); });
+    q('wk_rpeDec')?.addEventListener('click', ()=>{ S.rpeCur=Math.max(1,(S.rpeCur||6)-0.5); document.getElementById('wk_rpe').textContent=S.rpeCur.toFixed(1); });
+    q('wk_rpeInc')?.addEventListener('click', ()=>{ S.rpeCur=Math.min(10,(S.rpeCur||6)+0.5); document.getElementById('wk_rpe').textContent=S.rpeCur.toFixed(1); });
   }
 
-  function saveDragAverages(){ // compute averages for the last finished Arbeid
-    // Determine duration of just-finished Arbeid by scanning back until we hit previous phase switch timestamps
-    // Simpler: compute average on the fly using hrSamples/spdSamples/wattSamples captured inside tick
+  function init(plan){ if(S.plan) return; S.plan=plan; S.seq=expand(plan.blocks); S.idx=0; S.left=S.seq[0]?S.seq[0].dur:0; S.tTot=0; S.tDrag=0; S.dist=0; updateUI(); }
+
+  // Graph – fixed scales: HR 90–190 (left), speed 0–20 (right)
+  let c,ctx; function initGraph(host){ c=document.createElement('canvas'); c.width=900; c.height=260; c.style.width='100%'; ctx=c.getContext('2d'); host.appendChild(c); const ro=new ResizeObserver(()=>{ const r=host.getBoundingClientRect(); c.width=Math.max(600,Math.floor(r.width)); c.height=260; drawGraph(); }); ro.observe(host); }
+  function drawGraph(){ if(!ctx) return; const W=c.width,H=c.height; ctx.clearRect(0,0,W,H);
+    // axes box
+    ctx.strokeStyle='#b4c4e8'; ctx.strokeRect(40,10,W-60,H-30);
+    const t1=Date.now()/1000, t0=t1-15*60; // 15 min window
+    // HR line
+    ctx.strokeStyle='#d93c3c'; ctx.lineWidth=2; ctx.beginPath(); let first=true; const hrS=S.seriesHr; for(const p of hrS){ if(p.t<t0) continue; const x=40+((p.t-t0)/(15*60))*(W-60); const y=10+(1-((p.bpm-90)/(190-90)))*(H-30); if(first){ ctx.moveTo(x,y); first=false;} else ctx.lineTo(x,y); } ctx.stroke();
+    // Speed line (right axis 0..20)
+    ctx.strokeStyle='#d6a600'; ctx.lineWidth=2; ctx.beginPath(); first=true; const spS=S.seriesSpd; for(const p of spS){ if(p.t<t0) continue; const x=40+((p.t-t0)/(15*60))*(W-60); const y=10+(1-((p.kmh-0)/(20-0)))*(H-30); if(first){ ctx.moveTo(x,y); first=false;} else ctx.lineTo(x,y); } ctx.stroke();
+    // Axis labels
+    ctx.fillStyle='#0b1220'; ctx.font='12px system-ui'; [90,110,130,150,170,190].forEach(v=>{ const y=10+(1-((v-90)/(100)))*(H-30); ctx.fillText(v.toString(), 8, y+4); });
+    [0,5,10,15,20].forEach(v=>{ const y=10+(1-((v-0)/20))*(H-30); ctx.fillText(v.toString(), W-28, y+4); });
   }
 
-  function attachHandlers(g, plan){
-    document.getElementById('spdVal').onclick = ()=>{ engine.speedUnit = (engine.speedUnit==='kmh'?'pace':'kmh'); updateUI(g); };
-    document.getElementById('wattVal').onclick = ()=>{ engine.wattUnit = (engine.wattUnit==='W'?'Wkg':'W'); updateUI(g); };
-    document.getElementById('piVal').onclick = ()=>{ location.hash='#/pi?from=workout'; };
-    document.getElementById('btnWater').onclick = ()=>{ PI.addWater(1); };
-    const sd=document.getElementById('spdDec'), si=document.getElementById('spdInc');
-    const id=document.getElementById('incDec'), ii=document.getElementById('incInc');
-    const q10=document.getElementById('q10'), q15=document.getElementById('q15');
-    if(sd) sd.onclick=()=>{ AppState.tm.speed=Math.max(0,(AppState.tm.speed||0)-0.1); updateUI(g); };
-    if(si) si.onclick=()=>{ AppState.tm.speed=(AppState.tm.speed||0)+0.1; updateUI(g); };
-    if(id) id.onclick=()=>{ AppState.tm.incline=Math.max(0,(AppState.tm.incline||0)-1); updateUI(g); };
-    if(ii) ii.onclick=()=>{ AppState.tm.incline=(AppState.tm.incline||0)+1; updateUI(g); };
-    if(q10) q10.onclick=()=>{ AppState.tm.speed=10; updateUI(g); };
-    if(q15) q15.onclick=()=>{ AppState.tm.speed=15; updateUI(g); };
-    const rm=document.getElementById('rpeMinus'), rp=document.getElementById('rpePlus'); const rv=document.getElementById('rpeVal');
-    if(rm) rm.onclick=()=>{ engine.curRPE=Math.max(1, (engine.curRPE||6)-0.5); rv.textContent=String(engine.curRPE); };
-    if(rp) rp.onclick=()=>{ engine.curRPE=Math.min(10, (engine.curRPE||6)+0.5); rv.textContent=String(engine.curRPE); };
+  function attach(){ attachHandlers(); updateUI(); }
 
-    document.getElementById('start').onclick = ()=>{ if(engine.running) return; engine.running=true; engine.paused=false; engine.timer=setInterval(()=>{ if(!engine.paused){ engine.tTot++; engine.tDrag++; updateUI(g); const tEl=document.getElementById('timer'); if(tEl) tEl.textContent=UI.fmtTime(engine.left); engine.left--; if(engine.left<=0){ // phase switch
-            const just=engine.seq[engine.idx];
-            // compute last-drag averages if Arbeid
-            if(just && just.kind==='Arbeid'){
-              const sliceSec = just.dur; const now=Date.now()/1000;
-              const hrAvg = avgSeries(engine.seriesHr, now-sliceSec, now, 'bpm');
-              const spdAvg = avgSeries(engine.seriesSpd, now-sliceSec, now, 'kmh');
-              const wattAvg = avgSeries(engine.seriesWatt, now-sliceSec, now, (engine.wattUnit==='W'?'W':'Wkg'));
-              const eHR=document.getElementById('stAvgHR'); if(eHR) eHR.textContent=String(Math.round(hrAvg||0));
-              const eSpd=document.getElementById('stAvgSpd'); if(eSpd) eSpd.textContent=(spdAvg? spdAvg.toFixed(1):'-');
-              const eW=document.getElementById('stAvgW'); if(eW) eW.textContent=(wattAvg? (engine.wattUnit==='W'? Math.round(wattAvg)+' W' : wattAvg.toFixed(2)+' W/kg'):'-');
-              // lagre RPE for drag
-              if(just.rep) engine.rpePerDrag[`${just.set||1}-${just.rep}`]=engine.curRPE;
-            }
-            engine.idx++; setPhase(); }
-        }},1000); setPhase(); };
-    document.getElementById('pause').onclick = ()=>{ engine.paused=!engine.paused; };
-    document.getElementById('next').onclick = ()=>{ engine.idx=Math.min(engine.seq.length, engine.idx+1); setPhase(); };
-    document.getElementById('prev').onclick = ()=>{ engine.idx=Math.max(0, engine.idx-1); setPhase(); };
-    document.getElementById('save').onclick = ()=>{ finish(plan,true); };
-    document.getElementById('discard').onclick = ()=>{ if(confirm('Forkaste uten å lagre?')) finish(plan,false); };
-
-    // Bluetooth bindings (optional)
-    try{ BT.connectFTMS((spd,inc)=>{ if(spd!=null) AppState.tm.speed=spd; if(inc!=null) AppState.tm.incline=inc; }); }catch(e){ console.warn('FTMS valgfritt:', e); }
-  }
-
-  function avgSeries(series, t0, t1, key){ const pts=series.filter(p=>p.t>=t0 && p.t<=t1); if(!pts.length) return 0; return pts.reduce((a,b)=>a+(key?b[key]:b),0)/pts.length; }
-
-  function finish(plan, saved){ clearInterval(engine.timer); engine.timer=null; engine.running=false; engine.paused=false; if(saved){ const id='s_'+Date.now(); const s={ id, name:plan.name, endedAt:Date.now(), dist:engine.dist, total:engine.tTot,
-      hrSeries:engine.seriesHr, spdSeries:engine.seriesSpd, wattSeries:engine.seriesWatt, driftSeries:engine.seriesDrift, rpePerDrag:engine.rpePerDrag };
-      const st=AppState; st.logg=st.logg||[]; st.logg.push(s); Storage.saveP(AppState.currentProfile,'logg',st.logg); location.hash='#/result?id='+id; }
-    else{ location.hash='#/dashboard'; }
-  }
-
-  function render(el, st){ const plan = st.plan || (st.workouts&&st.workouts[0]) || {name:'Økt'}; engine.seq = expand(plan.blocks); engine.idx=0; engine.left=engine.seq[0]?engine.seq[0].dur:0; engine.tTot=0; engine.tDrag=0; engine.dist=0; engine.seriesHr=[]; engine.seriesSpd=[]; engine.seriesWatt=[]; engine.seriesDrift=[]; engine.rpePerDrag={}; engine.curRPE=6; const {graph} = drawLayout(el, plan); attachHandlers(graph, plan); setPhase(); }
-
-  return { render };
+  return { S, init, attach, initGraph };
 })();
+
+const Workout = {
+  onHR:null, onTM:null,
+  render(el, st){
+    el.innerHTML=''; const plan = st.plan || (st.workouts&&st.workouts[0]); if(!plan){ el.textContent='Ingen økt valgt.'; return; }
+    // Layout – three tiles row + quick
+    const top = UI.h('div',{class:'card'}); top.style.display='grid'; top.style.gridTemplateColumns='2fr 1.4fr 1fr'; top.style.gap='.5rem';
+
+    const colHR = UI.h('div',{});
+    colHR.append(UI.h('div',{class:'small'},'Puls')); colHR.append(UI.h('div',{id:'wk_hr',style:'font-size:3.2rem;font-weight:700'}, String(st.hr.bpm||0)));
+    const sub=UI.h('div',{style:'color:#4c5672'}, 'HR%: '); const hrp=UI.h('span',{id:'wk_hrp'},''); sub.appendChild(document.createTextNode(' ')); colHR.append(sub); colHR.append(UI.h('div',{class:'small'},'ΔHR drift')); colHR.append(UI.h('div',{id:'wk_dhr',style:'font-size:1.4rem'},'0'));
+
+    const colSpd = UI.h('div',{});
+    colSpd.append(UI.h('div',{class:'small'},'Fart / Stigning'));
+    const spdRow=UI.h('div',{}); const spd=UI.h('div',{id:'wk_spd',style:'font-size:1.6rem;cursor:pointer'},'0.0 km/t'); spd.addEventListener('click',()=>{ WorkoutEngine.S.speedUnit=(WorkoutEngine.S.speedUnit==='kmh'?'pace':'kmh'); }); spdRow.append(spd); colSpd.append(spdRow);
+    const inc=UI.h('div',{id:'wk_inc',style:'font-size:1.4rem'},'0%'); colSpd.append(inc);
+    const ctrl=UI.h('div',{class:'controls'});
+    ctrl.append(UI.h('button',{class:'btn',id:'wk_spdDec'},'−'), UI.h('button',{class:'btn',id:'wk_spdInc'},'+'));
+    const ctrl2=UI.h('div',{class:'controls'});
+    ctrl2.append(UI.h('button',{class:'btn',id:'wk_incDec'},'−'), UI.h('button',{class:'btn',id:'wk_incInc'},'+'));
+    colSpd.append(ctrl, ctrl2);
+
+    const colPI = UI.h('div',{});
+    colPI.append(UI.h('div',{class:'small'},'PI (trykk for detalj i PI-modul)'));
+    colPI.append(UI.h('div',{id:'wk_pi',style:'font-size:1.6rem;cursor:default'},'0.00'));
+    colPI.append(UI.h('div',{class:'small'},'Effekt'));
+    const pow=UI.h('div',{id:'wk_pow',style:'font-size:1.6rem;cursor:pointer'},'0 W'); colPI.append(pow);
+    const quick=UI.h('div',{class:'controls'}); quick.append(UI.h('button',{class:'btn',id:'wk_q10'},'10 km/t'), UI.h('button',{class:'btn',id:'wk_q15'},'15 km/t'));
+    colPI.append(quick);
+
+    top.append(colHR, colSpd, colPI);
+
+    // Graph
+    const graf = UI.h('div',{class:'card'}); WorkoutEngine.initGraph(graf);
+
+    // Right column – session controls + stats + RPE
+    const right = UI.h('div',{}); const box = UI.h('div',{class:'card'});
+    box.append(UI.h('h3',{}, plan.name));
+    box.append(UI.h('div',{id:'wk_phase',class:'list-item'},'–'));
+    box.append(UI.h('div',{id:'wk_next',class:'small'},''));
+    const timer = UI.h('div',{id:'wk_timer',style:'font-size:2rem'}, '00:00'); box.append(timer);
+    const controls = UI.h('div',{class:'controls'});
+    controls.append(UI.h('button',{class:'btn primary',id:'wk_start'},'Start'), UI.h('button',{class:'btn',id:'wk_pause'},'Pause'), UI.h('button',{class:'btn',id:'wk_prev'},'⟵'), UI.h('button',{class:'btn',id:'wk_next'},'⟶'), UI.h('button',{class:'btn',id:'wk_save'},'Lagre'), UI.h('button',{class:'btn danger',id:'wk_discard'},'Forkast'));
+    box.append(controls);
+
+    const stats = UI.h('div',{class:'card'});
+    const tbl = document.createElement('table'); tbl.className='table'; tbl.innerHTML='<tr><th>Param.</th><th>Verdi</th></tr>'+
+      '<tr><td>Totaltid</td><td id="wk_tTot">00:00</td></tr>'+
+      '<tr><td>Dragtid</td><td id="wk_tDrag">00:00</td></tr>'+
+      '<tr><td>Distanse (km)</td><td id="wk_dist">0.00</td></tr>'+
+      '<tr><td>Snittpuls (drag)</td><td id="wk_avgHR">-</td></tr>'+
+      '<tr><td>Snittfart (drag)</td><td id="wk_avgSpd">-</td></tr>'+
+      '<tr><td>SnittWatt (drag)</td><td id="wk_avgPow">-</td></tr>'+
+      '<tr><td>RPE nå</td><td><div id="wk_rpe">6.0</div><div class="controls"><button class="btn" id="wk_rpeDec">−</button><button class="btn" id="wk_rpeInc">+</button></div></td></tr>';
+    stats.append(tbl);
+
+    // Layout assemble
+    const grid = document.createElement('div'); grid.style.display='grid'; grid.style.gridTemplateColumns='1.6fr 1fr'; grid.style.gap='.5rem';
+    const leftCol = document.createElement('div'); leftCol.append(top, graf);
+    const rightCol = document.createElement('div'); rightCol.append(box, stats);
+    grid.append(leftCol, rightCol); el.append(grid);
+
+    // init engine and handlers
+    WorkoutEngine.init(plan); WorkoutEngine.attach();
+
+    // wiring for HR/TM callbacks
+    Workout.onHR = bpm=>{ const t=Date.now()/1000; WorkoutEngine.S.hrBuf.push({t,bpm}); while(WorkoutEngine.S.hrBuf.length && (t-WorkoutEngine.S.hrBuf[0].t)>70) WorkoutEngine.S.hrBuf.shift(); WorkoutEngine.S.seriesHr.push({t,bpm}); updateUI(); };
+    Workout.onTM = (spd,inc)=>{ const now=Date.now(); if(spd!==null && (!AppState.tm.manualUntil || now>AppState.tm.manualUntil)) AppState.tm.speed=spd; if(inc!==null) AppState.tm.incline=inc; };
+  }
+};

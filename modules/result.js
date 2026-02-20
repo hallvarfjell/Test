@@ -1,57 +1,44 @@
 
-// Resultat-modul v1.3.4 (patch for v1.3.2)
-// - Felles graffelt (HR+Fart)
-// - Per-drag tabell: HR, fart, Watt (est.) + RPE
-// - Pulsdrift-estimat (heat/dehyd/fatigue/glyc) – samlet/ikke per drag (enkelt første versjon)
-// - TSS (IF-basert dersom P_LT2 finnes)
-// - Merknader (lagres i logg)
+// Result module v1.3.6 – combined HR/speed graph, per-drag table (HR, speed, watt, RPE), TSS, notes
 
-const Result = { render(el, st){ el.innerHTML=''; const params=new URLSearchParams(location.hash.split('?')[1]||''); const id=params.get('id'); const s=(st.logg||[]).find(x=>x.id===id) || st.logg?.slice().pop(); if(!s){ el.textContent='Fant ikke økta.'; return; }
-  el.append(UI.h('h1',{class:'h1'},'Resultat'));
-  el.append(UI.h('div',{}, `${new Date(s.endedAt).toLocaleString()} – ${s.name}`));
+function drawComboGraph(canvas, hrSeries, spdSeries){
+  const ctx=canvas.getContext('2d'); const W=canvas.width=900, H=canvas.height=260; ctx.clearRect(0,0,W,H); ctx.strokeStyle='#b4c4e8'; ctx.strokeRect(40,10,W-60,H-30);
+  if(!(hrSeries&&hrSeries.length) && !(spdSeries&&spdSeries.length)) return;
+  const t0 = Math.min(hrSeries?.[0]?.t||Infinity, spdSeries?.[0]?.t||Infinity);
+  const t1 = Math.max(hrSeries?.[hrSeries.length-1]?.t||0, spdSeries?.[spdSeries.length-1]?.t||0);
+  // HR
+  if(hrSeries&&hrSeries.length){ ctx.strokeStyle='#d93c3c'; ctx.lineWidth=2; ctx.beginPath(); hrSeries.forEach((p,i)=>{ const x=40+((p.t-t0)/(t1-t0))*(W-60); const y=10+(1-((p.bpm-90)/100))*(H-30); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);}); ctx.stroke(); }
+  // Speed
+  if(spdSeries&&spdSeries.length){ ctx.strokeStyle='#d6a600'; ctx.lineWidth=2; ctx.beginPath(); spdSeries.forEach((p,i)=>{ const x=40+((p.t-t0)/(t1-t0))*(W-60); const y=10+(1-(p.kmh/20))*(H-30); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);}); ctx.stroke(); }
+  // labels
+  ctx.fillStyle='#0b1220'; ctx.font='12px system-ui'; [90,110,130,150,170,190].forEach(v=>{ const y=10+(1-((v-90)/100))*(H-30); ctx.fillText(v.toString(), 8, y+4); }); [0,5,10,15,20].forEach(v=>{ const y=10+(1-(v/20))*(H-30); ctx.fillText(v.toString(), W-28, y+4); });
+}
 
-  // Graf HR+Fart
-  const gCard = UI.h('div',{class:'card'}); gCard.append(UI.h('h3',{},'Puls & Fart'));
-  const gDiv = UI.h('div',{style:'height:260px'}); gCard.append(gDiv); const graph=new Graph.Combined(gDiv);
-  graph.setSeries(s.hrSeries||[], s.spdSeries||[]);
-  el.append(gCard);
+function computeTSS(session){
+  const settings = Storage.loadP(AppState.currentProfile,'settings',{}); const P2 = settings.P_L2||null; if(!P2) return null; // need LT2 W/kg
+  // Time-weighted IF^2 over session using speed series
+  const mass=settings.mass||75, met=settings.met_eff||0.25; const shoe=(1-(settings.shoe_gain_pct||0)/100), tm=settings.tm_cal||1;
+  function Wkg(spd,inc){ const v=spd/3.6, i=(inc||0)/100; return (4.185*v + (9.81*v*i)/met)*shoe*tm; }
+  const sp=session.spdSeries||[]; const inc=Object.fromEntries((session.incSeries||[]).map(p=>[Math.round(p.t),p.pct])); if(!sp.length) return null;
+  let load=0; for(let i=1;i<sp.length;i++){ const dt=Math.max(0, sp[i].t - sp[i-1].t); const incPct = inc[Math.round(sp[i].t)]||0; const IF = Wkg(sp[i].kmh, incPct)/P2; load += dt * (IF*IF); }
+  const hours = (session.total||0)/3600; const tss = (load/ (session.total||1)) * (session.total) / 3600 * 100; // ≈ IF^2 * h * 100
+  return Math.round(tss);
+}
 
-  // Per-drag tabell (beregn fra sekvens hvis lagret; ellers summer grove segmenter over tid)
-  const table = UI.h('table',{class:'table'}); table.innerHTML='<tr><th>Drag</th><th>HR snitt</th><th>Fart snitt</th><th>Watt snitt</th><th>RPE</th></tr>';
-  // grov tilnærming: del opp i arbeid-segmenter ved å se på rpePerDrag
-  const entries = Object.entries(s.rpePerDrag||{}); entries.sort();
-  entries.forEach(([key,rpe],i)=>{
-    // Finn tidsvinduet til dette draget ~ vi har ikke start/stop tider per drag i loggen i v1.3.2, så vi estimerer ved å plukke siste N sekunder før RPE ble satt.
-    // I v1.3.5 kan vi logge nøyaktig vendepunkter. Nå: vis RPE og '-' for snitt hvis vi ikke kan slice presist.
-    const tr=document.createElement('tr'); tr.innerHTML=`<td>${key}</td><td>-</td><td>-</td><td>-</td><td>${rpe}</td>`; table.appendChild(tr);
-  });
-  const perDragCard = UI.h('div',{class:'card'}); perDragCard.append(UI.h('h3',{},'Per‑drag'), table); el.append(perDragCard);
+const Result = { render(el, st){
+  el.innerHTML=''; const params = new URLSearchParams(location.hash.split('?')[1]||''); const id = params.get('id'); const s = (st.logg||[]).find(x=>x.id===id) || st.logg?.slice().pop(); if(!s){ el.textContent='Fant ikke økta.'; return; }
+  const head = UI.h('div',{class:'card'}); head.append(UI.h('h2',{}, `Resultat – ${s.name}`), UI.h('div',{}, `Slutt: ${new Date(s.endedAt).toLocaleString()}`)); el.append(head);
 
-  // Pulsdrift-oversikt
-  const driftCard = UI.h('div',{class:'card'});
-  driftCard.append(UI.h('h3',{},'Pulsdrift – estimerte komponenter'));
-  // summer deler
-  let sum={heat:0,dehyd:0,fatigue:0,glyc:0}, n=0; (s.driftSeries||[]).forEach(p=>{ const q=p.parts||{}; sum.heat+=(q.heat||0); sum.dehyd+=(q.dehyd||0); sum.fatigue+=(q.fatigue||0); sum.glyc+=(q.glyc||0); n++; });
-  const fmt=v=> (v/n).toFixed(3);
-  const dTbl=UI.h('table',{class:'table'}); dTbl.innerHTML=`<tr><th>Komponent</th><th>Gj.snitt drift‑andel</th></tr>
-    <tr><td>Varme</td><td>${n?fmt(sum.heat):'-'}</td></tr>
-    <tr><td>Dehydrering</td><td>${n?fmt(sum.dehyd):'-'}</td></tr>
-    <tr><td>Fatigue</td><td>${n?fmt(sum.fatigue):'-'}</td></tr>
-    <tr><td>Glykogen</td><td>${n?fmt(sum.glyc):'-'}</td></tr>`;
-  driftCard.append(dTbl); el.append(driftCard);
+  // Graph
+  const gwrap = UI.h('div',{class:'card'}); const c=document.createElement('canvas'); c.style.width='100%'; c.width=900; c.height=260; drawComboGraph(c, s.hrSeries||[], s.spdSeries||[]); gwrap.append(UI.h('h3',{},'Puls (90–190) & Fart (0–20)'), c); el.append(gwrap);
 
-  // TSS (IF-basert hvis P_LT2 finnes)
-  const cfg = Storage.loadP(AppState.currentProfile,'settings',{}); const PL2=cfg.P_L2||null; let TSS='-';
-  if(PL2){ // enkel IF-beregning fra Wattserie snitt
-    const WkgAvg = (s.wattSeries||[]).reduce((a,b)=>a+(b.Wkg||0),0)/Math.max(1,(s.wattSeries||[]).length);
-    const IF = WkgAvg/PL2; const hrs=(s.total||0)/3600; TSS = Math.round(IF*IF*hrs*100);
-  }
-  const tssCard=UI.h('div',{class:'card'}); tssCard.append(UI.h('h3',{},'TSS')), tssCard.append(UI.h('div',{}, String(TSS))); el.append(tssCard);
+  // Per-drag tabell
+  const tCard = UI.h('div',{class:'card'}); tCard.append(UI.h('h3',{},'Per drag'));
+  const tbl=document.createElement('table'); tbl.className='table'; tbl.innerHTML='<tr><th>#</th><th>HR</th><th>Fart (km/t)</th><th>Watt</th><th>RPE</th></tr>';
+  (s.perDrag||[]).forEach((d,i)=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${i+1}</td><td>${d.hr??'-'}</td><td>${d.spd??'-'}</td><td>${d.watt??'-'}</td><td>${(d.rpe??'-')}</td>`; tbl.appendChild(tr); }); tCard.append(tbl); el.append(tCard);
 
-  // Merknader (lagres i logg)
-  const noteCard = UI.h('div',{class:'card'}); noteCard.append(UI.h('h3',{},'Merknader'));
-  const area=document.createElement('textarea'); area.style.width='100%'; area.style.minHeight='120px'; area.value = s.note||''; noteCard.append(area);
-  const btn=UI.h('button',{class:'btn primary',onclick:()=>{ s.note=area.value; Storage.saveP(AppState.currentProfile,'logg',st.logg); alert('Lagret merknad.'); }},'Lagre merknad');
-  noteCard.append(btn); el.append(noteCard);
-
-} };
+  // TSS + Notater
+  const extras = UI.h('div',{class:'card'}); const tss=computeTSS(s); extras.append(UI.h('h3',{},'Oppsummering'));
+  const ul=document.createElement('ul'); ul.style.margin='0'; ul.style.paddingLeft='1.1rem'; ul.appendChild(UI.h('li',{},`Totaltid: ${UI.fmtTime(s.total||0)}`)); ul.appendChild(UI.h('li',{},`Distanse: ${(s.dist||0).toFixed(2)} km`)); if(tss!=null) ul.appendChild(UI.h('li',{},`TSS: ${tss}`)); extras.append(ul);
+  extras.append(UI.h('h3',{},'Merknader')); const notes = UI.h('textarea',{style:'width:100%;min-height:80px;border:1px solid #c9d6f0;border-radius:8px;padding:.5rem;'}); notes.value=s.notes||''; const saveN=UI.h('button',{class:'btn primary',onclick:()=>{ s.notes=notes.value; Storage.saveP(AppState.currentProfile,'logg', st.logg); alert('Merknader lagret.'); }},'Lagre merknader'); extras.append(notes, UI.h('div',{class:'controls'}, saveN)); el.append(extras);
+}};
