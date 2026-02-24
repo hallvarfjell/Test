@@ -1,6 +1,4 @@
-// Workout v1.4.2 – no 'attach()', PI.computeLive(), Phosphor icons
-const WorkoutEngine=(function(){ const S={ running:false, paused:false, timer:null, plan:null, seq:[], idx:0, left:0, tTot:0, dist:0, rpeCur:6,
-  hrSeries:[], spdSeries:[], incSeries:[], _perDrag:[], lastDrag:{hr:'-',spd:'-',watt:'-',rpe:'-'}, P2:null, tssLoad:0 };
+const WorkoutEngine=(function(){ const S={ running:false, paused:false, timer:null, plan:null, seq:[], idx:0, left:0, tTot:0, dist:0, rpeCur:6, hrSeries:[], spdSeries:[], incSeries:[], _perDrag:[], lastDrag:{hr:'-',spd:'-',watt:'-',rpe:'-'}, P2:null, tssLoad:0 };
   function reset(){ S.running=false; S.paused=false; if(S.timer){clearInterval(S.timer);S.timer=null;} S.seq=[];S.idx=0;S.left=0;S.tTot=0;S.dist=0;S.hrSeries=[];S.spdSeries=[];S.incSeries=[];S._perDrag=[];S.lastDrag={hr:'-',spd:'-',watt:'-',rpe:'-'}; S.tssLoad=0; S.P2=(AppState.settings?.P_L2)||null; }
   function current(){ return S.seq[S.idx]; }
   function expand(plan){ const out=[]; (plan.blocks||[]).forEach(b=>{ if(['Oppvarming','Pause','Nedjogg'].includes(b.kind)) out.push({kind:b.kind,dur:b.dur}); else if(b.kind==='Intervall'){ for(let i=1;i<=b.reps;i++){ out.push({kind:'Arbeid',dur:b.work,rep:i,reps:b.reps}); if(b.rest>0) out.push({kind:'Pause',dur:b.rest}); }}}); return out; }
@@ -27,53 +25,22 @@ const WorkoutEngine=(function(){ const S={ running:false, paused:false, timer:nu
 const Workout={ onHR:null, onTM:null, render(el,st){ el.innerHTML=''; const plan=st.plan || (st.workouts&&st.workouts[0]) || { name:'6x6', blocks:[{kind:'Oppvarming',dur:300},{kind:'Intervall',reps:6,work:360,rest:120},{kind:'Nedjogg',dur:300}] };
   const panel=UI.h('div',{class:'card'});
   const left=UI.h('div',{}); left.append(UI.h('div',{class:'small'},'Puls'), UI.h('div',{id:'wk_hr',style:'font-size:3rem;font-weight:700'},'0'));
-  const mid=UI.h('div',{}); mid.append(
-    UI.h('div',{class:'small'},'Fart'), UI.h('div',{id:'wk_spd',style:'font-size:1.6rem'},'0.0 km/t'),
-    UI.h('button',{class:'btn',id:'wk_spdDec'},UI.icon('ph-minus')), UI.h('button',{class:'btn',id:'wk_spdInc'},UI.icon('ph-plus')),
-    UI.h('div',{class:'small',style:'margin-top:.4rem'},'Stigning'), UI.h('div',{id:'wk_inc',style:'font-size:1.6rem'},'0%'),
-    UI.h('button',{class:'btn',id:'wk_incDec'},UI.icon('ph-minus')), UI.h('button',{class:'btn',id:'wk_incInc'},UI.icon('ph-plus'))
-  );
-  const right=UI.h('div',{}); right.append(
-    UI.h('div',{class:'small'},'Watt (est.)'), UI.h('div',{id:'wk_pow',style:'font-size:1.6rem'},'0 W'),
-    UI.h('div',{class:'small'},'PI'), UI.h('div',{id:'wk_pi',style:'font-size:1.6rem'},'–'),
-    UI.h('div',{class:'small'},'HR-drift'), UI.h('div',{id:'wk_dhr',style:'font-size:1.6rem'},'0'),
-    UI.h('div',{class:'small'},'TSS (akk.)'), UI.h('div',{id:'wk_tss',style:'font-size:1.2rem'},'–')
-  );
+  const mid=UI.h('div',{}); mid.append(UI.h('div',{class:'small'},'Fart'), UI.h('div',{id:'wk_spd',style:'font-size:1.6rem'},'0.0 km/t'), UI.h('button',{class:'btn',id:'wk_spdDec'},UI.icon('ph-minus')), UI.h('button',{class:'btn',id:'wk_spdInc'},UI.icon('ph-plus')),
+                                  UI.h('div',{class:'small',style:'margin-top:.4rem'},'Stigning'), UI.h('div',{id:'wk_inc',style:'font-size:1.6rem'},'0%'), UI.h('button',{class:'btn',id:'wk_incDec'},UI.icon('ph-minus')), UI.h('button',{class:'btn',id:'wk_incInc'},UI.icon('ph-plus')) );
+  const right=UI.h('div',{}); right.append(UI.h('div',{class:'small'},'Watt (est.)'), UI.h('div',{id:'wk_pow',style:'font-size:1.6rem'},'0 W'), UI.h('div',{class:'small'},'PI'), UI.h('div',{id:'wk_pi',style:'font-size:1.6rem'},'–'), UI.h('div',{class:'small'},'HR-drift'), UI.h('div',{id:'wk_dhr',style:'font-size:1.6rem'},'0'), UI.h('div',{class:'small'},'TSS (akk.)'), UI.h('div',{id:'wk_tss',style:'font-size:1.2rem'},'–'));
   panel.style.display='grid'; panel.style.gridTemplateColumns='1.1fr 1.3fr 1fr'; panel.style.gap='.5rem'; panel.append(left,mid,right);
 
   const box=UI.h('div',{class:'card'});
-  const toggle=UI.h('button',{class:'btn',id:'wk_toggle'},UI.icon('ph-play'));
-  const prev=UI.h('button',{class:'btn',id:'wk_prev'},UI.icon('ph-caret-left'));
-  const next=UI.h('button',{class:'btn',id:'wk_next'},UI.icon('ph-caret-right'));
-  const save=UI.h('button',{class:'btn',id:'wk_save'},UI.icon('ph-floppy-disk'));
-  const disc=UI.h('button',{class:'btn danger',id:'wk_discard'},UI.icon('ph-trash'));
-  box.append(
-    UI.h('div',{},UI.h('div',{class:'small'},`Økt: ${plan.name}`)),
-    UI.h('div',{class:'controls'},toggle,prev,next,save,disc),
-    UI.h('div',{class:'controls'},
-      UI.h('div',{},UI.h('div',{class:'small'},'Totaltid'), UI.h('div',{id:'wk_tot'},'00:00')),
-      UI.h('div',{},UI.h('div',{class:'small'},'Distanse (km)'), UI.h('div',{id:'wk_dist'},'0.00'))
-    )
-  );
+  const toggle=UI.h('button',{class:'btn',id:'wk_toggle'},UI.icon('ph-play')); const prev=UI.h('button',{class:'btn',id:'wk_prev'},UI.icon('ph-caret-left')); const next=UI.h('button',{class:'btn',id:'wk_next'},UI.icon('ph-caret-right')); const save=UI.h('button',{class:'btn',id:'wk_save'},UI.icon('ph-floppy-disk')); const disc=UI.h('button',{class:'btn danger',id:'wk_discard'},UI.icon('ph-trash'));
+  box.append(UI.h('div',{},UI.h('div',{class:'small'},`Økt: ${plan.name}`)), UI.h('div',{class:'controls'},toggle,prev,next,save,disc), UI.h('div',{class:'controls'}, UI.h('div',{},UI.h('div',{class:'small'},'Totaltid'), UI.h('div',{id:'wk_tot'},'00:00')), UI.h('div',{},UI.h('div',{class:'small'},'Distanse (km)'), UI.h('div',{id:'wk_dist'},'0.00'))));
 
-  const stats=UI.h('div',{class:'card'});
-  const t=document.createElement('table'); t.className='table';
-  t.innerHTML='<tr><th>For siste drag</th><th>Verdi</th></tr>'+
-              '<tr><td>Snittpuls</td><td id="wk_avgHR">-</td></tr>'+
-              '<tr><td>Snittfart (km/t)</td><td id="wk_avgSpd">-</td></tr>'+
-              '<tr><td>SnittWatt</td><td id="wk_avgPow">-</td></tr>'+
-              '<tr><td>RPE nå</td><td><div id="wk_rpe">6.0</div><div class="controls"><button class="btn" id="wk_rpeDec">−</button><button class="btn" id="wk_rpeInc">+</button></div></td></tr>';
+  const stats=UI.h('div',{class:'card'}); const t=document.createElement('table'); t.className='table'; t.innerHTML='<tr><th>For siste drag</th><th>Verdi</th></tr><tr><td>Snittpuls</td><td id="wk_avgHR">-</td></tr><tr><td>Snittfart (km/t)</td><td id="wk_avgSpd">-</td></tr><tr><td>SnittWatt</td><td id="wk_avgPow">-</td></tr><tr><td>RPE nå</td><td><div id="wk_rpe">6.0</div><div class="controls"><button class="btn" id="wk_rpeDec">−</button><button class="btn" id="wk_rpeInc">+</button></div></td></tr>';
   stats.append(t);
 
-  const grid=document.createElement('div'); grid.style.display='grid'; grid.style.gridTemplateColumns='1.6fr 1fr'; grid.style.gap='.5rem';
-  const leftCol=document.createElement('div'); leftCol.append(panel);
-  const rightCol=document.createElement('div'); rightCol.append(box,stats);
-  grid.append(leftCol,rightCol); el.append(grid);
+  const grid=document.createElement('div'); grid.style.display='grid'; grid.style.gridTemplateColumns='1.6fr 1fr'; grid.style.gap='.5rem'; const leftCol=document.createElement('div'); leftCol.append(panel); const rightCol=document.createElement('div'); rightCol.append(box,stats); grid.append(leftCol,rightCol); el.append(grid);
 
-  // init engine
   WorkoutEngine.init(plan);
 
-  // bindings
   const q=id=>document.getElementById(id);
   q('wk_toggle').addEventListener('click', ()=>WorkoutEngine.startToggle());
   q('wk_prev').addEventListener('click', ()=>WorkoutEngine.prev());
@@ -87,7 +54,6 @@ const Workout={ onHR:null, onTM:null, render(el,st){ el.innerHTML=''; const plan
   q('wk_rpeDec').addEventListener('click', ()=>{ WorkoutEngine.S.rpeCur=Math.max(1,(WorkoutEngine.S.rpeCur||6)-0.5); document.getElementById('wk_rpe').textContent=WorkoutEngine.S.rpeCur.toFixed(1); });
   q('wk_rpeInc').addEventListener('click', ()=>{ WorkoutEngine.S.rpeCur=Math.min(10,(WorkoutEngine.S.rpeCur||6)+0.5); document.getElementById('wk_rpe').textContent=WorkoutEngine.S.rpeCur.toFixed(1); });
 
-  // hooks for BT
   Workout.onHR=(bpm)=>{ const t=Date.now()/1000; WorkoutEngine.S.hrSeries.push({t,bpm}); };
   Workout.onTM=(spd,inc)=>{ const now=Date.now(); if(spd!==null && (!AppState.tm.manualUntil || now>AppState.tm.manualUntil)) AppState.tm.speed=spd; if(inc!==null) AppState.tm.incline=inc; };
 }};
