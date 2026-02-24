@@ -1,1 +1,6 @@
-const Storage={ load(k,def){ try{ const v=localStorage.getItem('INTZ_'+k); return v? JSON.parse(v):def;}catch(_){return def;} }, save(k,v){ try{ localStorage.setItem('INTZ_'+k, JSON.stringify(v)); }catch(_){} }, loadP(p,k,def){ return this.load(p+':'+k, def); }, saveP(p,k,v){ return this.save(p+':'+k, v); } };
+const Storage={
+  load(key,def){ try{ const v=localStorage.getItem('INTZ_'+key); return v? JSON.parse(v): def; }catch(e){ return def; } },
+  save(key,val){ try{ localStorage.setItem('INTZ_'+key, JSON.stringify(val)); }catch(e){} },
+  loadP(profile,key,def){ return Storage.load(profile+'_'+key, def); },
+  saveP(profile,key,val){ Storage.save(profile+'_'+key, val); }
+};

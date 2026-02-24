@@ -1,1 +1,1 @@
-const LogMod={ render(el,st){ el.innerHTML=''; const list=UI.h('div',{class:'list'}); (st.logg||[]).slice().reverse().forEach(s=>{ const it=UI.h('div',{class:'list-item',style:'cursor:pointer'}, `${new Date(s.endedAt).toLocaleString()} – ${s.name}`); it.addEventListener('click',()=>{ location.hash='#/result?id='+s.id; }); list.appendChild(it); }); el.append(list); }};
+const LogMod={ render(el,st){ el.innerHTML=''; const c=UI.h('div',{class:'card'}); c.append(UI.h('h2',{},'Logg'), UI.h('pre',{}, JSON.stringify(st.logg||[],null,2))); el.append(c); } };
