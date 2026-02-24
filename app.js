@@ -17,7 +17,7 @@ function reloadStateForProfile(){
   if(!AppState.currentProfile){
     AppState.settings=null; AppState.workouts=[]; AppState.logg=[]; return;
   }
-  // defaults som tidligere
+  // legg inn noen defaults som tidligere
   AppState.settings = Storage.loadP(AppState.currentProfile, 'settings', {
     hrmax:190, hrrest:50, lt1:135, lt2:160, mass:75
   });
@@ -69,7 +69,7 @@ function populateProfileSel(){
   };
 }
 
-// Ruter – gjør #/pi robust dersom PIMod ikke er lastet
+// Ruter – gjør #/pi robust dersom PIMod ikke er lastet enda
 const Routes = {
   '#/dashboard': (el,st)=> Dashboard && Dashboard.render ? Dashboard.render(el,st) : (el.textContent='Dashboard mangler.'),
   '#/editor'   : (el,st)=> Editor && Editor.render ? Editor.render(el,st) : (el.textContent='Editor mangler.'),
