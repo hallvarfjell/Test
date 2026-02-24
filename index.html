@@ -46,18 +46,20 @@
   <footer class="footer"><small>INTZ v1.3.7 – meny på én linje, profil i meny, eksport/import i meny, forbedret Økt/Resultat, BT‑fikser.</small></footer>
 
 
+<!-- components (hjelpebibliotek) -->
 <script src="./components/ui.js"></script>
 <script src="./components/storage.js"></script>
 <script src="./components/bt.js"></script>
 
+<!-- modules (må komme før app.js) -->
 <script src="./modules/dashboard.js"></script>
 <script src="./modules/editor.js"></script>
-<script src="./modules/workout.js"></script>
+<script src="./modules/workout.js"></script>   <!-- <— viktig at denne kommer før app.js -->
 <script src="./modules/result.js"></script>
 <script src="./modules/log.js"></script>
 <script src="./modules/pi.js"></script>
 
-<!-- ALLTID sist -->
+<!-- alltid sist -->
 <script src="./app.js"></script>
 
 </body>
