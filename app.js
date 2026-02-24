@@ -1,6 +1,7 @@
 // INTZ v1.3.7 app
 const AppState = {
   currentProfile: Storage.load('profile', null),
+  profiles: Storage.load('profiles', ['Hallvar', 'Monika']),
   settings: null,
   hr: {connected:false, bpm:0},
   tm: {connected:false, speed:0, incline:0, manualUntil:0},
@@ -19,7 +20,46 @@ function reloadStateForProfile(){
 }
 function setProfile(name){ AppState.currentProfile = name; Storage.save('profile', name); reloadStateForProfile(); router(); populateProfileSel(); }
 
-function populateProfileSel(){ const sel=document.getElementById('profileSel'); if(!sel) return; sel.innerHTML=''; const opt0=document.createElement('option'); opt0.value=''; opt0.textContent= AppState.currentProfile? `Profil: ${AppState.currentProfile}`: 'Velg profil'; sel.appendChild(opt0); ['Hallvar','Monika'].forEach(p=>{ const o=document.createElement('option'); o.value=p; o.textContent=p; sel.appendChild(o); }); sel.onchange=()=>{ if(sel.value) setProfile(sel.value); } }
+function populateProfileSel() {
+  const sel = document.getElementById('profileSel');
+  if (!sel) return;
+  sel.innerHTML = '';
+
+  // Placeholder viser valgt profil, men er disabled
+  const ph = document.createElement('option');
+  ph.value = '';
+  ph.textContent = AppState.currentProfile ? AppState.currentProfile : 'Velg profil';
+  ph.disabled = true; ph.selected = true;
+  sel.appendChild(ph);
+
+  // Eksisterende profiler
+  AppState.profiles.forEach(p => {
+    const o = document.createElement('option');
+    o.value = p; o.textContent = p;
+    sel.appendChild(o);
+  });
+
+  // + Legg til
+  const add = document.createElement('option');
+  add.value = '__add__';
+  add.textContent = '+ Legg til';
+  sel.appendChild(add);
+
+  sel.onchange = () => {
+    if (sel.value === '__add__') {
+      const n = prompt('Nytt profilnavn:');
+      if (n && n.trim()) {
+        AppState.profiles.push(n.trim());
+        Storage.save('profiles', AppState.profiles);
+        setProfile(n.trim());
+      } else {
+        populateProfileSel(); // reset dropdown
+      }
+    } else if (sel.value) {
+      setProfile(sel.value);
+    }
+  };
+}
 
 const Routes = { '#/dashboard': Dashboard.render, '#/editor': Editor.render, '#/workout': Workout.render, '#/result': Result.render, '#/pi': PIMod.render, '#/log': LogMod.render };
 function router(){ const r = location.hash.split('?')[0] || '#/dashboard'; (Routes[r]||Dashboard.render)(document.getElementById('app'), AppState); }
