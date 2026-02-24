@@ -1,0 +1,11 @@
+
+// --- PATCH NOTE (apply in modules/workout.js) ---
+// 1) Replace the block where PI is computed inside updateUI()/tick with:
+//    const res = (typeof PI!=='undefined' && PI.computeLive) ? PI.computeLive() : null;
+//    set PI and dHR labels from res.
+// 2) When collecting per-drag summary, also compute average incline:
+//    Maintain a buffer perDragBuf.inc.push(incNow) during Arbeid, and when pushing summary:
+//    const aInc = perDragBuf.inc.reduce((a,b)=>a+b,0)/(perDragBuf.inc.length||1);
+//    S.lastDrag.inc = +(aInc||0).toFixed(1);
+//    S._perDrag.push({ hr:aHR, spd:+aSpd.toFixed(1), inc:+(aInc||0).toFixed(1), watt:+(aW||0).toFixed(0), rpe:S.rpeCur });
+// -------------------------------------------------
