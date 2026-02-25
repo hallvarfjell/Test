@@ -1,57 +1,28 @@
-<!DOCTYPE html>
-<html lang="nb">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#ffffff" />
-  <title>INTZ – v1.4.4</title>
-  <link rel="icon" href="./assets/icons/icon-192.png" />
-  <link rel="stylesheet" href="./styles.css" />
-  <!-- Phosphor Icons (regular) -->
-  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css" />
-</head>
-<body>
-  <header class="topbar" role="banner">
-    <div class="brand" onclick="location.hash='#/dashboard'" title="Hjem">
-      <span class="logo">INTZ</span>
-    </div>
-    <nav class="nav" id="nav">
-      <button class="nav-btn" onclick="location.hash='#/dashboard'"><i class="ph ph-house"></i> Dashboard</button>
-      <button class="nav-btn" onclick="location.hash='#/editor'"><i class="ph ph-pencil-simple"></i> Editor</button>
-      <button class="nav-btn" onclick="location.hash='#/workout'"><i class="ph ph-timer"></i> Økt</button>
-      <button class="nav-btn" onclick="location.hash='#/pi'"><i class="ph ph-gauge"></i> PI</button>
-      <button class="nav-btn" onclick="location.hash='#/log'"><i class="ph ph-clipboard-text"></i> Logg</button>
-    </nav>
-    <div class="status">
-      <div class="profile">
-        <label for="profileSel" class="small">Profil:</label>
-        <select id="profileSel" class="input small"></select>
-      </div>
-      <button id="btn-hr" class="status-icon" title="Koble til pulssensor"><i class="ph ph-heart"></i></button>
-      <button id="btn-ftms" class="status-icon" title="Koble til tredemølle"><i class="ph ph-person-simple-run"></i></button>
-      <button id="btn-export" class="status-icon" title="Eksporter backup"><i class="ph ph-floppy-disk"></i></button>
-      <button id="btn-import" class="status-icon" title="Importer backup"><i class="ph ph-download-simple"></i></button>
-      <time id="clock" class="clock" aria-live="polite"></time>
-    </div>
-  </header>
+const PI=(function(){ let cfg=null, waterL=0; const runtime={prevTime:null,tSec:0,cumSweatL:0};
+  function load(){ cfg=Storage.loadP(AppState.currentProfile,'settings',{})||{}; cfg=Object.assign({HRmax:190,HRrest:50,LT1:135,LT2:160,mass:75,
+    RPE_LT1:4,RPE_LT2:7,P_L1:null,P_L2:null,met_eff:0.25, shoe_gain_pct:4, tm_cal:1.0,
+    sweat_r1:0.8,sweat_r2:1.6,sweat_k:1.5,sweat_base:20,sweat_temp_slope:0.03,dehyd_thresh:1.0,
+    drift_heat_perC_perMin:0.0005, drift_dehyd_perPct:0.02, drift_fatigue_perUnit:0.001, drift_glyc_perMin:0.0008, glyc_onset_min:45, glyc_tau_min:30, wHR:2,wRPE:1 }, cfg); return cfg; }
+  function save(nc){ cfg=Object.assign(load(),nc||{}); Storage.saveP(AppState.currentProfile,'settings',cfg); return cfg; }
+  const pctHRR=(hr,r,m)=>(hr-r)/Math.max(1,(m-r)); const clamp01=x=>Math.max(0,Math.min(1,x));
+  function demand_Wkg(speedKmh,gradePct){ const c=load(); const v=(speedKmh||0)/3.6, i=(gradePct||0)/100; const P_flat=4.185*v; const P_climb=(9.81*v*i)/(c.met_eff||0.25); const shoe=1-((c.shoe_gain_pct||0)/100); const tm=(c.tm_cal||1); return (P_flat+P_climb)*shoe*tm; }
+  function expectedFromPower(Pd){ const c=load(); if(c.P_L1&&c.P_L2&&c.P_L2>0){ const IF=Pd/c.P_L2, IF1=c.P_L1/c.P_L2; const x=clamp01((IF-IF1)/Math.max(1e-6,(1-IF1))); const p1=pctHRR(c.LT1,c.HRrest,c.HRmax), p2=pctHRR(c.LT2,c.HRrest,c.HRmax); return {IF,x,pHRR_exp:p1+x*(p2-p1), RPE_exp:(c.RPE_LT1||4)+x*((c.RPE_LT2||7)-(c.RPE_LT1||4))}; } else { const p1=pctHRR(c.LT1,c.HRrest,c.HRmax), p2=pctHRR(c.LT2,c.HRrest,c.HRmax); return {IF:1,x:null,pHRR_exp:(p1+p2)/2,RPE_exp:(c.RPE_LT1+c.RPE_LT2)/2}; } }
+  function sweatRateLph(tempC,x){ const c=load(); const base=(c.sweat_r1||0.8)*Math.pow((c.sweat_r2||1.6)/(c.sweat_r1||0.8), Math.pow(clamp01(x||0),(c.sweat_k||1.5))); const add=(tempC>(c.sweat_base||20))? (c.sweat_temp_slope||0.03)*(tempC-(c.sweat_base||20)):0; return base+add; }
+  function hrDrift(totalMin,tempC,dehydPct,fatigueUnit,glycMin){ const c=load(); const dHeat=Math.max(0,(tempC-20))*(c.drift_heat_perC_perMin||0.0005)*totalMin; const dDehy=Math.max(0,(dehydPct-(c.dehyd_thresh||1)))*(c.drift_dehyd_perPct||0.02); const dFat=Math.max(0,fatigueUnit)*(c.drift_fatigue_perUnit||0.001); const over=Math.max(0,glycMin-(c.glyc_onset_min||45)); const dGlyc=(over>0)? (c.drift_glyc_perMin||0.0008)*(1-Math.exp(-over/Math.max(1,(c.glyc_tau_min||30))))*glycMin:0; return { total:(dHeat+dDehy+dFat+dGlyc) }; }
+  function computeLive(){ const hr=AppState?.hr?.bpm||0, spd=AppState?.tm?.speed||0, inc=AppState?.tm?.incline||0, rpe=(window.WorkoutEngine?.S?.rpeCur??6); const Pd=demand_Wkg(spd,inc); const exp=expectedFromPower(Pd); const now=performance.now(); if(runtime.prevTime==null) runtime.prevTime=now; let dt=Math.max(0,(now-runtime.prevTime)/1000); runtime.prevTime=now; if(dt>2) dt=1; runtime.tSec+=dt; const Lph=sweatRateLph(20,exp.x); runtime.cumSweatL+=Lph*(dt/3600); const dehyd=(runtime.cumSweatL)/(load().mass||75)*100; const drift=hrDrift(runtime.tSec/60,20,dehyd,(exp.x==null?0.5:exp.x)*(runtime.tSec/60),runtime.tSec/60); const HRnet=hr/(1+Math.max(0,drift.total)); const pAct=pctHRR(HRnet,load().HRrest,load().HRmax); const ratioHR=(exp.pHRR_exp>0)?(pAct/exp.pHRR_exp):1; const ratioRPE=(exp.RPE_exp>0)?(rpe/exp.RPE_exp):1; const a=(load().wHR||2), b=(load().wRPE||1); const IR=Math.pow(Math.pow(ratioHR,a)*Math.pow(ratioRPE,b),1/Math.max(1,(a+b))); const IF=exp.IF||1; return { PI: IF/Math.max(1e-6,IR), dHR: Math.max(0, hr-HRnet) }; }
+  function addWater(dl){ waterL+=(dl||0)/10; }
+  return { load, save, computeLive, addWater };
+})();
 
-  <main id="app" class="app" tabindex="-1" aria-live="polite"></main>
-  <footer class="footer"><small>INTZ v1.4.4 – Recovery build (PI, Økt, Resultat, Logg, Editor, Dashboard).</small></footer>
-
-  <!-- Components -->
-  <script src="./components/ui.js"></script>
-  <script src="./components/storage.js"></script>
-  <script src="./components/bt.js"></script>
-
-  <!-- Modules (må lastes før app.js) -->
-  <script src="./modules/dashboard.js"></script>
-  <script src="./modules/editor.js"></script>
-  <script src="./modules/workout.js"></script>
-  <script src="./modules/result.js"></script>
-  <script src="./modules/log.js"></script>
-  <script src="./modules/pi.js"></script>
-
-  <!-- App (alltid sist) -->
-  <script src="./app.js"></script>
-</body>
-</html>
+const PIMod={ render(el){ el.innerHTML=''; PI.load();
+  const head=UI.h('div',{class:'card'}); head.append(UI.h('h2',{},'PI (Performance Index)'));
+  const live=UI.h('div',{class:'card'});
+  const piVal=UI.h('div',{class:'h1',id:'piVal'},'–'); const dhrVal=UI.h('div',{class:'h1',id:'dHRVal'},'0');
+  live.append(UI.h('div',{class:'controls'},
+    UI.h('div',{},UI.h('div',{class:'small'},'PI'), piVal),
+    UI.h('div',{},UI.h('div',{class:'small'},'ΔHR'), dhrVal)
+  ));
+  el.append(head, live);
+  const t=setInterval(()=>{ const r=PI.computeLive(); piVal.textContent=r.PI? r.PI.toFixed(3):'–'; dhrVal.textContent=String(Math.round(r.dHR||0)); },1000);
+  el.addEventListener('DOMNodeRemoved',()=>clearInterval(t),{once:true});
+}};

@@ -1,21 +1,11 @@
-// INTZ v1.4.4 – Recovery: robust router + profiler + eksport/import
-const AppState = {
-  currentProfile: Storage.load('profile', null),
-  profiles: Storage.load('profiles', ['Hallvar','Monika']),
-  settings: null,
-  hr: {connected:false,bpm:0},
-  tm: {connected:false,speed:0,incline:0,manualUntil:0},
-  wakeLock:null,
-  workouts:null,
-  logg:null,
-  plan:null,
-  session:{running:false,paused:false}
-};
-function reloadStateForProfile(){ if(!AppState.currentProfile){ AppState.settings=null; AppState.workouts=[]; AppState.logg=[]; return; } AppState.settings=Storage.loadP(AppState.currentProfile,'settings',{hrmax:190,hrrest:50,lt1:135,lt2:160,mass:75}); AppState.workouts=Storage.loadP(AppState.currentProfile,'workouts',[]); AppState.logg=Storage.loadP(AppState.currentProfile,'logg',[]); }
-function setProfile(name){ AppState.currentProfile=name; Storage.save('profile',name); reloadStateForProfile(); router(); populateProfileSel(); }
-function populateProfileSel(){ const sel=document.getElementById('profileSel'); if(!sel) return; sel.innerHTML=''; const ph=document.createElement('option'); ph.value=''; ph.textContent=AppState.currentProfile? AppState.currentProfile : 'Velg profil'; ph.disabled=true; ph.selected=true; sel.appendChild(ph); (AppState.profiles||[]).forEach(p=>{ const o=document.createElement('option'); o.value=p; o.textContent=p; sel.appendChild(o); }); const add=document.createElement('option'); add.value='__add__'; add.textContent='+ Legg til'; sel.appendChild(add); sel.onchange=()=>{ if(sel.value==='__add__'){ const n=prompt('Nytt profilnavn:'); if(n&&n.trim()){ const nm=n.trim(); if(!(AppState.profiles||[]).includes(nm)){ AppState.profiles=(AppState.profiles||[]).concat([nm]); Storage.save('profiles',AppState.profiles); } setProfile(nm); } else populateProfileSel(); } else if(sel.value){ setProfile(sel.value); } } }
-const Routes={ '#/dashboard':(el,st)=> (typeof Dashboard!=='undefined'&&Dashboard.render)?Dashboard.render(el,st):(el.textContent='Dashboard mangler.'), '#/editor':(el,st)=> (typeof Editor!=='undefined'&&Editor.render)?Editor.render(el,st):(el.textContent='Editor mangler.'), '#/workout':(el,st)=> (typeof Workout!=='undefined'&&Workout.render)?Workout.render(el,st):(document.getElementById('app').innerHTML='<div class="card">Økt‑modulen kunne ikke lastes.<br>Kontroller at <code>modules/workout.js</code> lastes før <code>app.js</code>.</div>'), '#/result':(el,st)=> (typeof Result!=='undefined'&&Result.render)?Result.render(el,st):(el.textContent='Resultat mangler.'), '#/pi':(el,st)=> (typeof PIMod!=='undefined'&&PIMod.render)?PIMod.render(el,st):(el.textContent='PI-modul mangler.'), '#/log':(el,st)=> (typeof LogMod!=='undefined'&&LogMod.render)?LogMod.render(el,st):(el.textContent='Logg mangler.') };
-function router(){ const r=location.hash.split('?')[0]||'#/dashboard'; (Routes[r]||Routes['#/dashboard'])(document.getElementById('app'),AppState); }
-async function ensureWakeLock(){ try{ if('wakeLock' in navigator){ AppState.wakeLock=await navigator.wakeLock.request('screen'); AppState.wakeLock.addEventListener('release',()=>ensureWakeLock()); } }catch(e){} }
-window.addEventListener('hashchange',router);
-window.addEventListener('load',()=>{ populateProfileSel(); reloadStateForProfile(); router(); ensureWakeLock(); const clock=document.getElementById('clock'); if(clock) setInterval(()=>{ clock.textContent=new Date().toLocaleTimeString(); },1000); const bHR=document.getElementById('btn-hr'); if(bHR) bHR.addEventListener('click', async()=>{ try{ await BT.connectHR(bpm=>{ AppState.hr.bpm=bpm; AppState.hr.connected=true; UI.setConnected('btn-hr',true); if(typeof Workout!=='undefined'&&Workout.onHR) Workout.onHR(bpm); }); }catch(e){ alert('HR tilkobling feilet: '+e.message); } }); const bTM=document.getElementById('btn-ftms'); if(bTM) bTM.addEventListener('click', async()=>{ try{ await BT.connectFTMS((spd,inc)=>{ if(typeof Workout!=='undefined'&&Workout.onTM) Workout.onTM(spd,inc); AppState.tm.connected=true; UI.setConnected('btn-ftms',true); }); }catch(e){ alert('FTMS tilkobling feilet: '+e.message); } }); const bEx=document.getElementById('btn-export'); if(bEx) bEx.addEventListener('click',()=>{ const data={ ver:'1.4.4', exportedAt:new Date().toISOString(), items:{} }; for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k&&k.startsWith('INTZ_')){ try{ data.items[k]=JSON.parse(localStorage.getItem(k)); }catch(_){ data.items[k]=localStorage.getItem(k); } } } const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='intz_backup_'+Date.now()+'.json'; a.click(); URL.revokeObjectURL(a.href); }); const bIm=document.getElementById('btn-import'); if(bIm) bIm.addEventListener('click',()=>{ const inp=document.createElement('input'); inp.type='file'; inp.accept='.json,application/json'; inp.onchange=async()=>{ const f=inp.files[0]; if(!f) return; try{ const data=JSON.parse(await f.text()); if(data&&data.items){ Object.entries(data.items).forEach(([k,v])=> localStorage.setItem(k, JSON.stringify(v))); location.reload(); } else alert('Ugyldig backup.'); }catch(e){ alert('Import feilet: '+e.message);} }; inp.click(); }); });
+const Result={ render(el,st){ el.innerHTML='';
+  const params=new URLSearchParams(location.hash.split('?')[1]||'');
+  const id=params.get('id');
+  const s=(st.logg||[]).find(x=>x.id===id)||st.logg?.slice().pop();
+  if(!s){ el.textContent='Fant ikke økta.'; return; }
+  const head=UI.h('div',{class:'card'}); head.append(UI.h('h2',{},`Resultat – ${s.name}`)); el.append(head);
+  const tbl=UI.h('table',{class:'table'});
+  tbl.innerHTML='<tr><th>#</th><th>HR</th><th>Fart</th><th>Stigning</th><th>Watt</th><th>RPE</th></tr>';
+  (s.perDrag||[]).forEach((d,i)=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${i+1}</td><td>${d.hr??'-'}</td><td>${d.spd??'-'}</td><td>${d.inc??'-'}</td><td>${d.watt??'-'}</td><td>${d.rpe??'-'}</td>`; tbl.appendChild(tr); });
+  el.append(UI.h('div',{class:'card'}, tbl));
+}};
