@@ -1,1 +1,56 @@
-const LogMod={render:(el)=>{el.innerHTML='';el.append(UI.h('div',{class:'card'},UI.h('h2',{},'Logg')))}};
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#ffffff" />
+  <title>INTZ – v1.4.5</title>
+  <link rel="icon" href="./assets/icons/icon-192.png" />
+  <link rel="stylesheet" href="./styles.css" />
+  <!-- Phosphor Icons (regular) -->
+  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css" />
+</head>
+<body>
+  <header class="topbar" role="banner">
+    <div class="brand" onclick="location.hash='#/dashboard'" title="Hjem"><span class="logo">INTZ</span></div>
+    <nav class="nav">
+      <button class="nav-btn" onclick="location.hash='#/dashboard'"><i class="ph ph-house"></i> Dashboard</button>
+      <button class="nav-btn" onclick="location.hash='#/editor'"><i class="ph ph-pencil-simple"></i> Editor</button>
+      <button class="nav-btn" onclick="location.hash='#/workout'"><i class="ph ph-timer"></i> Økt</button>
+      <button class="nav-btn" onclick="location.hash='#/pi'"><i class="ph ph-gauge"></i> PI</button>
+      <button class="nav-btn" onclick="location.hash='#/log'"><i class="ph ph-clipboard-text"></i> Logg</button>
+    </nav>
+    <div class="status">
+      <div class="profile">
+        <label for="profileSel" class="small">Profil:</label>
+        <select id="profileSel" class="input small"></select>
+      </div>
+      <button id="btn-hr" class="status-icon" title="Koble til pulssensor"><i class="ph ph-heart"></i></button>
+      <button id="btn-ftms" class="status-icon" title="Koble til tredemølle"><i class="ph ph-person-simple-run"></i></button>
+      <button id="btn-export" class="status-icon" title="Eksporter backup"><i class="ph ph-floppy-disk"></i></button>
+      <button id="btn-import" class="status-icon" title="Importer backup"><i class="ph ph-download-simple"></i></button>
+      <time id="clock" class="clock" aria-live="polite"></time>
+    </div>
+  </header>
+
+  <main id="app" class="app" tabindex="-1" aria-live="polite"></main>
+  <footer class="footer"><small>INTZ v1.4.5 – Workout polish (hurtigvalg, graf), Slope, standardøkter.</small></footer>
+
+  <!-- Components -->
+  <script src="./components/ui.js"></script>
+  <script src="./components/storage.js"></script>
+  <script src="./components/bt.js"></script>
+
+  <!-- Modules (må lastes før app.js) -->
+  <script src="./modules/dashboard.js"></script>
+  <script src="./modules/editor.js"></script>
+  <script src="./modules/workout.js"></script>
+  <script src="./modules/result.js"></script>
+  <script src="./modules/log.js"></script>
+  <script src="./modules/pi.js"></script>
+
+  <!-- App (alltid sist) -->
+  <script src="./app.js"></script>
+</body>
+</html>
+``
