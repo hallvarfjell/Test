@@ -1,6 +1,1 @@
-const Editor={ render(el,st){ el.innerHTML='';
-  const c=UI.h('div',{class:'card'});
-  c.append(UI.h('h2',{},'Editor'));
-  c.append(UI.h('p',{},'Planlagt: redigering av øktplaner. Inntil videre kan du velge standardøkter i Økt-modulen.'));
-  el.append(c);
-}};
+const Editor={render:(el)=>{el.innerHTML='';el.append(UI.h('div',{class:'card'},UI.h('h2',{},'Editor')))}};

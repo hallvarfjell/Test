@@ -1,11 +1,1 @@
-const UI={
-  h(tag,props={},...children){ const el=document.createElement(tag); for(const [k,v] of Object.entries(props||{})){
-    if(k.startsWith('on')&&typeof v==='function') el.addEventListener(k.slice(2).toLowerCase(),v);
-    else if(k==='html') el.innerHTML=v; else if(k==='class') el.className=v; else el.setAttribute(k,v);
-  }
-  for(const c of children){ if(c==null) continue; if(typeof c==='string') el.appendChild(document.createTextNode(c)); else el.appendChild(c); }
-  return el; },
-  fmtTime(s){ s=Math.max(0,Math.floor(s)); const m=String(Math.floor(s/60)).padStart(2,'0'); const x=String(s%60).padStart(2,'0'); return `${m}:${x}`; },
-  setConnected(id,on){ const b=document.getElementById(id); if(!b) return; b.classList.toggle('connected', !!on); },
-  icon(name){ const i=document.createElement('i'); i.className='ph '+name; return i; }
-};
+const UI={h:(t,p={},...c)=>{const e=document.createElement(t);for(const[k,v]of Object.entries(p||{}))k.startsWith('on')&&'function'==typeof v?e.addEventListener(k.slice(2).toLowerCase(),v):'html'===k?e.innerHTML=v:'class'===k?e.className=v:e.setAttribute(k,v);for(const n of c)null!=n&&('string'==typeof n?e.appendChild(document.createTextNode(n)):e.appendChild(n));return e},fmtTime:s=>{s=Math.max(0,Math.floor(s));const m=String(Math.floor(s/60)).padStart(2,'0'),x=String(s%60).padStart(2,'0');return `${m}:${x}`},setConnected:(id,on)=>{const b=document.getElementById(id);b&&b.classList.toggle('connected',!!on)},icon:(name)=>{const i=document.createElement('i');i.className='ph '+name;return i}};

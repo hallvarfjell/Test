@@ -1,11 +1,1 @@
-const Result={ render(el,st){ el.innerHTML='';
-  const params=new URLSearchParams(location.hash.split('?')[1]||'');
-  const id=params.get('id');
-  const s=(st.logg||[]).find(x=>x.id===id)||st.logg?.slice().pop();
-  if(!s){ el.textContent='Fant ikke økta.'; return; }
-  const head=UI.h('div',{class:'card'}); head.append(UI.h('h2',{},`Resultat – ${s.name}`)); el.append(head);
-  const tbl=UI.h('table',{class:'table'});
-  tbl.innerHTML='<tr><th>#</th><th>HR</th><th>Fart</th><th>Stigning</th><th>Watt</th><th>RPE</th></tr>';
-  (s.perDrag||[]).forEach((d,i)=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${i+1}</td><td>${d.hr??'-'}</td><td>${d.spd??'-'}</td><td>${d.inc??'-'}</td><td>${d.watt??'-'}</td><td>${d.rpe??'-'}</td>`; tbl.appendChild(tr); });
-  el.append(UI.h('div',{class:'card'}, tbl));
-}};
+const Dashboard={render(el){el.innerHTML='';const c=UI.h('div',{class:'card'});c.append(UI.h('h2',{},'Dashboard (hotfix)'));el.append(c)}};
