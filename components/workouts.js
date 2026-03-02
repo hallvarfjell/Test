@@ -1,1 +1,0 @@
-const Workouts={ defaults(){ return [ {id:'w_6x6', name:'6x6 min', blocks:[{kind:'Oppvarming', dur:420},{kind:'Intervall', reps:6, work:360, rest:60},{kind:'Nedjogg', dur:420}]}, {id:'w_8x6', name:'8x6 min', blocks:[{kind:'Oppvarming', dur:420},{kind:'Intervall', reps:8, work:360, rest:60},{kind:'Nedjogg', dur:420}]}, {id:'w_custom', name:'Egendefinert', blocks:[]} ]; } };
