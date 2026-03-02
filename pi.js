@@ -1,1 +1,0 @@
-const Workout={render:(el)=>{el.innerHTML='';el.append(UI.h('div',{class:'card'},UI.h('h2',{},'Økt')))}};

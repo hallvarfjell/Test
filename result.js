@@ -1,1 +1,0 @@
-const Storage={load:(k,d)=>{try{const v=localStorage.getItem('INTZ_'+k);return v?JSON.parse(v):d}catch(e){return d}},save:(k,v)=>{try{localStorage.setItem('INTZ_'+k,JSON.stringify(v))}catch(e){}},loadP:(p,k,d)=>Storage.load(p+'_'+k,d),saveP:(p,k,v)=>Storage.save(p+'_'+k,v)};

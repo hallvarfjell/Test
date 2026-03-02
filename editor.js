@@ -1,1 +1,0 @@
-const Result={render:(el)=>{el.innerHTML='';el.append(UI.h('div',{class:'card'},UI.h('h2',{},'Resultat')))}};
