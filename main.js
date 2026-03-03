@@ -753,25 +753,84 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     }catch(e){ showErr(e); }
   }
 
-  
-// == INTZ: ensure live panel exists ==
-function createLivePanelINTZ(){
-  try{
-    if(document.getElementById('live-metrics')) return;
-    const rc=document.querySelector('section.rightcol'); if(!rc) return;
-    const card=document.createElement('div'); card.id='live-metrics'; card.className='card'; card.style.padding='12px';
-    card.innerHTML=`<h3>Øktstatus</h3>
-<div style=\"display:grid;grid-template-columns:repeat(2,minmax(160px,1fr));gap:8px\">
-<div><div class=\"small\">Påløpt tid</div><div id=\"live-elapsed\">00:00</div></div>
-<div><div class=\"small\">Gjenstående tid</div><div id=\"live-remaining\">--:--</div></div>
-<div><div class=\"small\">Distanse</div><div id=\"live-dist\">0.00 km</div></div>
-<div><div class=\"small\">TSS</div><div id=\"live-tss\">0.0</div></div>
-</div>
-<div class=\"small\" style=\"margin-top:6px\" id=\"last-drag-line\">Siste drag: –</div>`;
-    const anchor=document.querySelector('.graphcard'); if(anchor&&anchor.parentNode){anchor.parentNode.insertBefore(card, anchor.nextSibling);} else rc.appendChild(card);
-  }catch(e){}
-}
+  document.addEventListener('DOMContentLoaded', init);
+})();
 
-document.addEventListener('DOMContentLoaded', ()=>{ try{createLivePanelINTZ();}catch(e){} });
-document.addEventListener('DOMContentLoaded', init);
+
+// == INTZ_v10.2_livepanel_fix ==
+
+(function(){
+  function $(id){ return document.getElementById(id); }
+  function safeFmtMMSS(sec){ try{ sec=Math.max(0, Math.floor(sec||0)); const m=Math.floor(sec/60), ss=String(sec%60).padStart(2,'0'); return `${m}:${ss}`; }catch(_){ return '00:00'; } }
+  function computePlannedTotalSec(w){
+    try{
+      if(!w) return 0;
+      // If totalSec already provided, trust it
+      if(typeof w.totalSec==='number' && isFinite(w.totalSec) && w.totalSec>0) return w.totalSec;
+      let total = (w.warmupSec||0) + (w.cooldownSec||0);
+      const s = (w.series||[]);
+      for(const x of s){
+        total += (Number(x.reps||0)) * (Number(x.workSec||0) + Number(x.restSec||0));
+        total += Number(x.seriesRestSec||0);
+      }
+      return total;
+    }catch(_){ return 0; }
+  }
+  function updateLastDragMetricsRescan(){
+    try{
+      if(!window.STATE || !STATE.logger || !STATE.logger.points || !STATE.logger.points.length) return;
+      const pts = STATE.logger.points;
+      // Find last contiguous block where phase==='work' that ended before the last point if current phase isn't work
+      let endIdx = pts.length-1;
+      // If we're currently in work, skip until we find a non-work to close the last complete work segment
+      if(pts[endIdx] && pts[endIdx].phase==='work'){
+        // no completed segment yet
+        return;
+      }
+      // walk back to last work sample
+      while(endIdx>=0 && pts[endIdx].phase!=='work') endIdx--;
+      if(endIdx<0) return;
+      let startIdx=endIdx;
+      while(startIdx>0 && pts[startIdx-1].phase==='work') startIdx--;
+      if(startIdx> endIdx) return;
+      const seg = pts.slice(startIdx, endIdx+1);
+      if(!seg.length) return;
+      const avgSpd = seg.reduce((a,p)=>a+(p.speed_ms||0),0)/seg.length;
+      const endTs = seg[seg.length-1].ts;
+      const hr20 = seg.filter(p=>p.ts>=endTs-20000).map(p=>p.hr||0);
+      const avgHr20 = hr20.length? Math.round(hr20.reduce((a,b)=>a+b,0)/hr20.length):0;
+      STATE.metrics = STATE.metrics||{};
+      STATE.metrics.lastDrag = { speedKmh:(avgSpd||0)*3.6, hr20:avgHr20 };
+    }catch(_){ }
+  }
+  function updateLivePanelINTZ(){
+    try{
+      if(!window.STATE) return;
+      const w = STATE.workout;
+      // elapsed/remaining
+      if(w && w.startedAt){
+        const es = Math.max(0, Math.floor((Date.now()- new Date(w.startedAt).getTime())/1000));
+        const total = computePlannedTotalSec(w) || es; // fallback to elapsed
+        const rs = Math.max(0, total - es);
+        if($('live-elapsed')) $('live-elapsed').textContent = safeFmtMMSS(es);
+        if($('live-remaining')) $('live-remaining').textContent = safeFmtMMSS(rs);
+      }
+      // distance
+      if($('live-dist')) $('live-dist').textContent = (((STATE.logger&&STATE.logger.dist)||0)/1000).toFixed(2) + ' km';
+      // TSS
+      if($('live-tss')) $('live-tss').textContent = (((STATE.logger&&STATE.logger.tss)||0).toFixed(1));
+      // Last drag line
+      if(!STATE.metrics || !STATE.metrics.lastDrag) updateLastDragMetricsRescan();
+      if($('last-drag-line') && STATE.metrics && STATE.metrics.lastDrag){
+        const ld = STATE.metrics.lastDrag;
+        $('last-drag-line').textContent = 'Siste drag: snittfart ' + (ld.speedKmh||0).toFixed(1) + ' km/t · snittpuls (20s) ' + (ld.hr20||0) + ' bpm';
+      }
+    }catch(_){ }
+  }
+  // One guarded timer – independent of other loops in the app
+  if(!window._intzLiveTimer){
+    window._intzLiveTimer = setInterval(updateLivePanelINTZ, 1000);
+  }
+  // Also run once on DOM ready
+  document.addEventListener('DOMContentLoaded', updateLivePanelINTZ);
 })();
