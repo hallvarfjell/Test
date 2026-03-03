@@ -753,5 +753,25 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     }catch(e){ showErr(e); }
   }
 
-  document.addEventListener('DOMContentLoaded', init);
+  
+// == INTZ: ensure live panel exists ==
+function createLivePanelINTZ(){
+  try{
+    if(document.getElementById('live-metrics')) return;
+    const rc=document.querySelector('section.rightcol'); if(!rc) return;
+    const card=document.createElement('div'); card.id='live-metrics'; card.className='card'; card.style.padding='12px';
+    card.innerHTML=`<h3>Øktstatus</h3>
+<div style=\"display:grid;grid-template-columns:repeat(2,minmax(160px,1fr));gap:8px\">
+<div><div class=\"small\">Påløpt tid</div><div id=\"live-elapsed\">00:00</div></div>
+<div><div class=\"small\">Gjenstående tid</div><div id=\"live-remaining\">--:--</div></div>
+<div><div class=\"small\">Distanse</div><div id=\"live-dist\">0.00 km</div></div>
+<div><div class=\"small\">TSS</div><div id=\"live-tss\">0.0</div></div>
+</div>
+<div class=\"small\" style=\"margin-top:6px\" id=\"last-drag-line\">Siste drag: –</div>`;
+    const anchor=document.querySelector('.graphcard'); if(anchor&&anchor.parentNode){anchor.parentNode.insertBefore(card, anchor.nextSibling);} else rc.appendChild(card);
+  }catch(e){}
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{ try{createLivePanelINTZ();}catch(e){} });
+document.addEventListener('DOMContentLoaded', init);
 })();
