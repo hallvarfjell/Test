@@ -757,80 +757,25 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
 })();
 
 
-// == INTZ_v10.2_livepanel_fix ==
+// == INTZ_v10.2_livepanel_fix_wrap ==
 
 (function(){
-  function $(id){ return document.getElementById(id); }
-  function safeFmtMMSS(sec){ try{ sec=Math.max(0, Math.floor(sec||0)); const m=Math.floor(sec/60), ss=String(sec%60).padStart(2,'0'); return `${m}:${ss}`; }catch(_){ return '00:00'; } }
-  function computePlannedTotalSec(w){
-    try{
-      if(!w) return 0;
-      // If totalSec already provided, trust it
-      if(typeof w.totalSec==='number' && isFinite(w.totalSec) && w.totalSec>0) return w.totalSec;
-      let total = (w.warmupSec||0) + (w.cooldownSec||0);
-      const s = (w.series||[]);
-      for(const x of s){
-        total += (Number(x.reps||0)) * (Number(x.workSec||0) + Number(x.restSec||0));
-        total += Number(x.seriesRestSec||0);
-      }
-      return total;
-    }catch(_){ return 0; }
-  }
-  function updateLastDragMetricsRescan(){
-    try{
-      if(!window.STATE || !STATE.logger || !STATE.logger.points || !STATE.logger.points.length) return;
-      const pts = STATE.logger.points;
-      // Find last contiguous block where phase==='work' that ended before the last point if current phase isn't work
-      let endIdx = pts.length-1;
-      // If we're currently in work, skip until we find a non-work to close the last complete work segment
-      if(pts[endIdx] && pts[endIdx].phase==='work'){
-        // no completed segment yet
-        return;
-      }
-      // walk back to last work sample
-      while(endIdx>=0 && pts[endIdx].phase!=='work') endIdx--;
-      if(endIdx<0) return;
-      let startIdx=endIdx;
-      while(startIdx>0 && pts[startIdx-1].phase==='work') startIdx--;
-      if(startIdx> endIdx) return;
-      const seg = pts.slice(startIdx, endIdx+1);
-      if(!seg.length) return;
-      const avgSpd = seg.reduce((a,p)=>a+(p.speed_ms||0),0)/seg.length;
-      const endTs = seg[seg.length-1].ts;
-      const hr20 = seg.filter(p=>p.ts>=endTs-20000).map(p=>p.hr||0);
-      const avgHr20 = hr20.length? Math.round(hr20.reduce((a,b)=>a+b,0)/hr20.length):0;
-      STATE.metrics = STATE.metrics||{};
-      STATE.metrics.lastDrag = { speedKmh:(avgSpd||0)*3.6, hr20:avgHr20 };
-    }catch(_){ }
-  }
-  function updateLivePanelINTZ(){
-    try{
-      if(!window.STATE) return;
-      const w = STATE.workout;
-      // elapsed/remaining
-      if(w && w.startedAt){
-        const es = Math.max(0, Math.floor((Date.now()- new Date(w.startedAt).getTime())/1000));
-        const total = computePlannedTotalSec(w) || es; // fallback to elapsed
-        const rs = Math.max(0, total - es);
-        if($('live-elapsed')) $('live-elapsed').textContent = safeFmtMMSS(es);
-        if($('live-remaining')) $('live-remaining').textContent = safeFmtMMSS(rs);
-      }
-      // distance
-      if($('live-dist')) $('live-dist').textContent = (((STATE.logger&&STATE.logger.dist)||0)/1000).toFixed(2) + ' km';
-      // TSS
-      if($('live-tss')) $('live-tss').textContent = (((STATE.logger&&STATE.logger.tss)||0).toFixed(1));
-      // Last drag line
-      if(!STATE.metrics || !STATE.metrics.lastDrag) updateLastDragMetricsRescan();
-      if($('last-drag-line') && STATE.metrics && STATE.metrics.lastDrag){
-        const ld = STATE.metrics.lastDrag;
-        $('last-drag-line').textContent = 'Siste drag: snittfart ' + (ld.speedKmh||0).toFixed(1) + ' km/t · snittpuls (20s) ' + (ld.hr20||0) + ' bpm';
-      }
-    }catch(_){ }
-  }
-  // One guarded timer – independent of other loops in the app
-  if(!window._intzLiveTimer){
-    window._intzLiveTimer = setInterval(updateLivePanelINTZ, 1000);
-  }
-  // Also run once on DOM ready
-  document.addEventListener('DOMContentLoaded', updateLivePanelINTZ);
+  // Ensure updateLivePanelINTZ exists before wrapping
+  if (typeof updateLivePanelINTZ !== 'function') return;
+  try{
+    if (typeof writeSample === 'function' && !writeSample._intzWrapped){
+      const _orig = writeSample;
+      const _wrap = function(t){ try{ return _orig(t); } finally { try{ updateLivePanelINTZ(); }catch(e){} } };
+      _wrap._intzWrapped = true;
+      window.writeSample = _wrap;
+    }
+  }catch(e){}
+  // Also call once when ticker starts (if available)
+  try{
+    if (typeof startTicker === 'function' && !startTicker._intzWrapped){
+      const __origStart = startTicker;
+      const __wrapStart = function(){ const r = __origStart.apply(this, arguments); try{ updateLivePanelINTZ(); }catch(e){} return r; };
+      __wrapStart._intzWrapped = true; window.startTicker = __wrapStart;
+    }
+  }catch(e){}
 })();
