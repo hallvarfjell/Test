@@ -5,27 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#f7fafc" />
   <title>Intervall PWA</title>
-<link rel="stylesheet" href="style.css" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
   <script src="https://unpkg.com/phosphor-icons@1.4.2"></script>
-  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png" />
-  <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png" />
-  <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png" />
-  <link rel="shortcut icon" href="assets/favicon.ico" />
-  <link rel="manifest" href="assets/site.webmanifest" />
-
 </head>
 <body>
   <header class="topbar" id="topbar">
     <div class="nav">
-  <a href="index.html" class="brand" style="display:flex;align-items:center;gap:8px">
-    <img src="assets/favicon-32x32.png" alt="INTZ" width="24" height="24" style="display:block"/>
-    <strong>INTZ</strong>
-  </a>
-  <a href="index.html">Hovedside</a>
-  <a href="builder.html">Øktbygger</a>
-  <a href="log.html">Logg</a>
-  <a href="settings.html">Innstillinger</a>
-</div>
+      <a href="index.html"><strong>INTZ</strong></a>
+      <a href="builder.html">Øktbygger</a>
+      <a href="log.html">Logg</a>
+      <a href="settings.html">Innstillinger</a>
+    </div>
     <div class="devicectl">
       <button id="connect-hr" class="primary" title="Koble til puls"><i class="ph-heart ph-fw"></i> Puls</button>
       <button id="connect-treadmill" class="secondary" title="Koble til mølle"><i class="ph-treadmill ph-fw"></i> Mølle</button>
@@ -128,19 +119,7 @@
           <canvas id="chart" aria-label="trening data graf" role="img"></canvas>
         </div>
       </div>
-      
- <div id="live-metrics" class="card" style="padding:12px">
-  <h3>Øktstatus</h3>
-  <div style="display:grid;grid-template-columns:repeat(2,minmax(160px,1fr));gap:8px">
-    <div><div class="small">Påløpt tid</div><div id="live-elapsed">00:00</div></div>
-    <div><div class="small">Gjenstående tid</div><div id="live-remaining">--:--</div></div>
-    <div><div class="small">Distanse</div><div id="live-dist">0.00 km</div></div>
-    <div><div class="small">TSS</div><div id="live-tss">0.0</div></div>
-  </div>
-  <div class="small" style="margin-top:6px" id="last-drag-line">Siste drag: –</div>
- </div>
-
-<p class="small" style="margin:0 8px 12px 8px">Ghost = tidsjustert snitt av valgte økter (HR/Watt) lagt oppå live-kurven.</p>
+      <p class="small" style="margin:0 8px 12px 8px">Ghost = tidsjustert snitt av valgte økter (HR/Watt) lagt oppå live-kurven.</p>
     </section>
   </main>
 

@@ -38,7 +38,7 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     series:{hr:[], speed:[], watt:[], rpe:[]}, windowSec:900,
     workout:null, ticker:null, wakeLock:null,
     rpe:0, rpeByRep:{},
-    logger:{active:false, points:[], startTs:null, dist:0, tss:0},
+    logger:{active:false, points:[], startTs:null, dist:0},
     ghost:{enabled:false, ids:new Set(), avg:null},
     cal:{K:Number(getNS('calK',1.0)), Crun:Number(getNS('cRun',1.0))}
   };
@@ -333,9 +333,6 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
       grade:STATE.gradePct||0, dist_m:STATE.logger.dist, rpe:STATE.rpe,
       phase:wstate?wstate.phase:'', rep:wstate&&wstate.phase==='work'?wstate.rep:0, watt:w
     });
-      // TSS increment (HR/LT2-based)
-      try{ const hrRef=STATE.LT2||160; const IF=Math.max(0,Math.min(1.2,(STATE.hr||0)/hrRef)); const dTSS=(IF*IF)/36; STATE.logger.tss=(STATE.logger.tss||0)+dTSS; }catch(_){ }
-
   }
   function finishSession(){
     try{
@@ -354,7 +351,7 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
         reps:(w.series||[]).reduce((a,s)=>a+(Number(s.reps)||0),0),
         startedAt:w.startedAt, endedAt:w.endedAt,
         lt1:STATE.LT1, lt2:STATE.LT2, massKg:STATE.massKg, rpeByRep:STATE.rpeByRep,
-        points:STATE.logger.points, tss:STATE.logger.tss||0
+        points:STATE.logger.points
       };
       const arr=getNS('sessions',[]); arr.push(session); setNS('sessions', arr);
       window.location.assign('results.html#'+session.id);
@@ -756,48 +753,5 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     }catch(e){ showErr(e); }
   }
 
-  
-// == INTZ: ensure live panel exists ==
-function createLivePanelINTZ(){
-  try{
-    if(document.getElementById('live-metrics')) return;
-    const rc=document.querySelector('section.rightcol'); if(!rc) return;
-    const card=document.createElement('div'); card.id='live-metrics'; card.className='card'; card.style.padding='12px';
-    card.innerHTML=`<h3>Øktstatus</h3>
-<div style=\"display:grid;grid-template-columns:repeat(2,minmax(160px,1fr));gap:8px\">
-<div><div class=\"small\">Påløpt tid</div><div id=\"live-elapsed\">00:00</div></div>
-<div><div class=\"small\">Gjenstående tid</div><div id=\"live-remaining\">--:--</div></div>
-<div><div class=\"small\">Distanse</div><div id=\"live-dist\">0.00 km</div></div>
-<div><div class=\"small\">TSS</div><div id=\"live-tss\">0.0</div></div>
-</div>
-<div class=\"small\" style=\"margin-top:6px\" id=\"last-drag-line\">Siste drag: –</div>`;
-    const anchor=document.querySelector('.graphcard'); if(anchor&&anchor.parentNode){anchor.parentNode.insertBefore(card, anchor.nextSibling);} else rc.appendChild(card);
-  }catch(e){}
-}
-
-document.addEventListener('DOMContentLoaded', ()=>{ try{createLivePanelINTZ();}catch(e){} });
-document.addEventListener('DOMContentLoaded', init);
-  /* INTZ export STATE/writeSample/startTicker */
-  try{ window.STATE=STATE; window.writeSample=writeSample; window.startTicker=startTicker; }catch(e){}
+  document.addEventListener('DOMContentLoaded', init);
 })();
-
-
-// INTZ live panel updater
-function updateLivePanelINTZ(){
-  try{ const $=id=>document.getElementById(id); if(!(window.STATE)) return; const W=window.STATE; const w=W.workout;
-    const fmt=(sec)=>{sec=Math.max(0,Math.floor(sec||0)); const m=Math.floor(sec/60),ss=String(sec%60).padStart(2,'0'); return `${m}:${ss}`;};
-    const plan=(()=>{ try{ if(w&&typeof w.totalSec==='number'&&isFinite(w.totalSec)&&w.totalSec>0) return w.totalSec; let tot=(w?.warmupSec||0)+(w?.cooldownSec||0); for(const x of (w?.series||[])){ tot += (Number(x.reps||0))*((Number(x.workSec||0))+(Number(x.restSec||0))); tot += Number(x.seriesRestSec||0);} return tot; }catch(_){return 0;}})();
-    if(w && w.startedAt){ const es=Math.max(0,Math.floor((Date.now()-new Date(w.startedAt).getTime())/1000)); const rs=Math.max(0,(plan||es)-es); if($('live-elapsed')) $('live-elapsed').textContent=fmt(es); if($('live-remaining')) $('live-remaining').textContent=fmt(rs);} 
-    if($('live-dist')) $('live-dist').textContent=((W.logger?.dist||0)/1000).toFixed(2)+' km';
-    if($('live-tss')) $('live-tss').textContent=((W.logger?.tss||0).toFixed(1));
-    if($('last-drag-line')){ try{ const pts=W.logger?.points||[]; if(pts.length){ let end=pts.length-1; if(pts[end].phase!=='work'){ while(end>=0&&pts[end].phase!=='work') end--; if(end>=0){ let start=end; while(start>0&&pts[start-1].phase==='work') start--; const seg=pts.slice(start,end+1); if(seg.length){ const avgSpd=seg.reduce((a,p)=>a+(p.speed_ms||0),0)/seg.length; const endTs=seg[seg.length-1].ts; const hr20=seg.filter(p=>p.ts>=endTs-20000).map(p=>p.hr||0); const avgHr20=hr20.length? Math.round(hr20.reduce((a,b)=>a+b,0)/hr20.length):0; W.metrics=W.metrics||{}; W.metrics.lastDrag={speedKmh:(avgSpd||0)*3.6, hr20:avgHr20}; } } } const ld=W.metrics?.lastDrag; if(ld) $('last-drag-line').textContent='Siste drag: snittfart '+(ld.speedKmh||0).toFixed(1)+' km/t · snittpuls (20s) '+(ld.hr20||0)+' bpm'; }catch(_){ } }
-  }catch(_){ }
-}
-
-if(!window._intzLiveTimer){ window._intzLiveTimer=setInterval(()=>{ try{ updateLivePanelINTZ(); }catch(_){ } },1000); }
-
-// INTZ wrap writeSample/startTicker for live panel
-(function(){ try{ if(typeof window.updateLivePanelINTZ==='function'){
- if(typeof window.writeSample==='function' && !window.writeSample._intzWrapped){ const _o=window.writeSample; const _w=function(t){ try{ return _o(t);} finally{ try{ updateLivePanelINTZ(); }catch(e){} } }; _w._intzWrapped=true; window.writeSample=_w; }
- if(typeof window.startTicker==='function' && !window.startTicker._intzWrapped){ const o=window.startTicker; const w=function(){ const r=o.apply(this, arguments); try{ updateLivePanelINTZ(); }catch(e){} return r; }; w._intzWrapped=true; window.startTicker=w; }
-}}catch(e){} })();

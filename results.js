@@ -14,18 +14,10 @@ function setNS(k, v){ localStorage.setItem(nsKey(k), JSON.stringify(v)); }
   function formatMMSS(sec){ sec=Math.max(0, Math.round(sec)); const m=Math.floor(sec/60), s=String(sec%60).padStart(2,'0'); return `${m}:${s}`; }
   function avg(arr){ return arr.length? arr.reduce((a,b)=>a+b,0)/arr.length:0; }
 
-  
-function computeSummary(s){
-  const pts = s.points||[];
-  if(!pts.length) return {dur:0,dist:0,avgHR:0,avgW:0,maxHR:0,tss:(s.tss||0)};
-  const dur = Math.max(0, (new Date(s.endedAt).getTime() - new Date(s.startedAt).getTime())/1000);
-  const dist = (pts[pts.length-1].dist_m||0)/1000;
-  let sumHR=0,cntHR=0,sumW=0,cntW=0,maxHR=0;
-  pts.forEach(p=>{ if(p.hr){ sumHR+=p.hr; cntHR++; if(p.hr>maxHR) maxHR=p.hr; } if(p.watt!=null){ sumW += p.watt; cntW++; } });
-  const avgHR= cntHR? Math.round(sumHR/cntHR):0; const avgW= cntW? Math.round(sumW/cntW):0;
-  return {dur,dist,avgHR,avgW,maxHR,tss:(s.tss||0)};
-}
-function renderSummary(){ const s=SESSION; const sum=computeSummary(s); const when=new Date(s.startedAt||Date.now()); const name=s.name||'Økt'; const reps=s.reps||0; $('summary').innerHTML = `
+  function computeSummary(s){ const pts=s.points||[]; if(!pts.length) return {dur:0,dist:0,avgHR:0,avgW:0}; const dur = Math.max(0, (new Date(s.endedAt).getTime() - new Date(s.startedAt).getTime())/1000);
+    const dist = (pts[pts.length-1].dist_m||0)/1000; let sumHR=0,cntHR=0,sumW=0,cntW=0; pts.forEach(p=>{ if(p.hr){ sumHR+=p.hr; cntHR++; } if(p.watt!=null){ sumW += p.watt; cntW++; } }); const avgHR= cntHR? Math.round(sumHR/cntHR):0; const avgW= cntW? Math.round(sumW/cntW):0; return {dur,dist,avgHR,avgW}; }
+
+  function renderSummary(){ const s=SESSION; const sum=computeSummary(s); const when=new Date(s.startedAt||Date.now()); const name=s.name||'Økt'; const reps=s.reps||0; $('summary').innerHTML = `
     <div><strong>${name}</strong></div>
     <div class="small">${when.toLocaleString()}</div>
     <ul style="list-style:none;padding-left:0;display:grid;gap:4px;margin:8px 0 0 0">
