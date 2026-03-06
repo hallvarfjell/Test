@@ -1,13 +1,6 @@
-// INTZ v10.1 – Stabil hovedlogikk + Ghost overlay + Øktstatus-forbedringer
-// Build ID: 2026-03-06_ghost-overlay_v2
-// Endringer:
-//  - Ghost overlay tegnes i draw() (HR/Watt, semitransparent)
-//  - Redraw etter “Bruk” i ghost-menyen (draw())
-//  - Øktstatus: elapsed=0 når ikke aktiv; remaining tar hensyn til skip
-//  - “Siste drag”: uten labels (kun "XX.X km/t · YY bpm")
-//  - Auto-forvalg: første mal velges hvis ingen annen er valgt
-//  - Ekstra null-sjekker for å hindre early-crash
-console.info('[INTZ] main.js loaded: 2026-03-06_ghost-overlay_v2');
+// INTZ v10.1 – Stabil hovedlogikk + Ghost overlay + Øktstatus-forbedringer + status i toppknapper
+// Build ID: 2026-03-06_ui-maxkeys_v1
+console.info('[INTZ] main.js loaded: 2026-03-06_ui-maxkeys_v1');
 
 function activeUser(){ return localStorage.getItem('active_user') || 'default'; }
 function nsKey(k){ return 'u:'+activeUser()+':'+k; }
@@ -43,6 +36,15 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     6:"Moderat hard",7:"Hard",8:"Svært hard",9:"Nesten maksimal",10:"Maksimal innsats"
   };
 
+  // Tilkoblingsstatus i toppknappene
+  function setDeviceStatus(kind, connected){
+    const id = (kind==='hr') ? 'connect-hr' : 'connect-treadmill';
+    const b = document.getElementById(id);
+    if(!b) return;
+    b.classList.remove('connected','disconnected');
+    b.classList.add(connected? 'connected':'disconnected');
+  }
+
   const STATE = {
     hr: null, speedKmh: 0, gradePct: 0,
     massKg: Number(getNS('massKg',75)),
@@ -57,12 +59,10 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     totalSec:0
   };
 
-  // ---------- Utils ----------
   function clamp(n,min,max){ return Math.min(max, Math.max(min,n)); }
   function fmtMMSS(s){ s=Math.max(0,Math.floor(s)); const m=Math.floor(s/60), ss=String(s%60).padStart(2,'0'); return `${m}:${ss}`; }
   function displaySpeedKmh(){ if(STATE.workout && (STATE.workout.phase==='rest' || STATE.workout.phase==='seriesrest')) return 0; return STATE.speedKmh; }
 
-  // ---------- Wake Lock ----------
   async function requestWakeLock(){
     try{
       if('wakeLock' in navigator){
@@ -72,7 +72,6 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     }catch(e){}
   }
 
-  // ---------- BLE: HR ----------
   async function connectHR(){
     try{
       if(!('bluetooth' in navigator)) return alert('Nettleseren støtter ikke Web Bluetooth');
@@ -89,25 +88,19 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
         const bpm = hr16? dv.getUint16(i,true) : dv.getUint8(i);
         STATE.hr = bpm;
       });
+      setDeviceStatus('hr', true);
     }catch(e){ console.error(e); alert('Kunne ikke koble til pulsbelte: '+e); }
   }
 
-  // ---------- BLE: FTMS tredemølle ----------
   async function connectTreadmill(){
     try{
       if(!('bluetooth' in navigator)) return alert('Nettleseren støtter ikke Web Bluetooth');
       const device = await navigator.bluetooth.requestDevice({ filters:[{ services:[0x1826] }] });
       const server = await device.gatt.connect();
       const ftms  = await server.getPrimaryService(0x1826);
-
       const tdc   = await ftms.getCharacteristic(0x2ACD);
       await tdc.startNotifications();
-
-      const status = el('ftms-status');
-      if(status){
-        status.textContent = 'FTMS: Tilkoblet';
-        status.classList.add('connected');
-      }
+      setDeviceStatus('tm', true);
 
       tdc.addEventListener('characteristicvaluechanged', ev=>{
         const dv = ev.target.value;
@@ -117,8 +110,8 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
         const instSpeedKmh = dv.getUint16(i, true) / 100; i += 2;
         setSpeed(instSpeedKmh);
 
-        if (flags & (1 << 1)) i += 2; // avg speed
-        if (flags & (1 << 2)) i += 3; // total distance
+        if (flags & (1 << 1)) i += 2;
+        if (flags & (1 << 2)) i += 3;
         if (flags & (1 << 3)) {
           const incline01pct = dv.getInt16(i, true); i += 2;
           const rampAngle01d = dv.getInt16(i, true); i += 2;
@@ -128,10 +121,7 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
       });
 
       device.addEventListener('gattserverdisconnected', ()=>{
-        if(status){
-          status.textContent='FTMS: Frakoblet';
-          status.classList.remove('connected');
-        }
+        setDeviceStatus('tm', false);
       });
     }catch(e){
       console.error(e);
@@ -139,7 +129,6 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     }
   }
 
-  // ---------- UI setters ----------
   function setSpeed(v){
     STATE.speedKmh = Math.max(0, Number(v) || 0);
     el('manual-speed') && (el('manual-speed').value = STATE.speedKmh.toFixed(1));
@@ -160,7 +149,6 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
   }
   function applyRPEChange(delta){ setRPE((Number(el('rpe-now')?.value)||0)+delta); }
 
-  // ---------- Workouts ----------
   const BUILDER_KEY='custom_workouts_v2';
   function loadCustomWorkouts(){ return getNS(BUILDER_KEY,[]); }
   function workoutFromCfg(cw){
@@ -230,7 +218,6 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     const sd=el('sel-dur'); if(sd) sd.textContent = fmtMMSS(STATE.totalSec);
   }
 
-  // ---------- Øktmotor ----------
   function startTicker(){
     if(STATE.ticker) return;
     if(STATE.workout && !STATE.workout.startedAt){
@@ -334,7 +321,6 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     updateWorkoutUI();
   }
 
-  // ---------- Estimering watt + logging ----------
   function estimateWattExternal(speedKmh, gradePct, massKg, Crun, K){
     const g=9.81, v=(speedKmh||0)/3.6, grade=(gradePct||0)/100;
     const mech = massKg * (g * v * grade + Crun * v);
@@ -395,7 +381,6 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     }catch(e){ console.error('finishSession failed', e); alert('Klarte ikke å lagre økt: '+e.message); }
   }
 
-  // ---------- UI tekst ----------
   function stepDurationLabel(w){
     if(!w) return '';
     if(w.phase==='warmup') return fmtMMSS(w.warmupSec);
@@ -502,7 +487,6 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     el('next2') && (el('next2').textContent='Deretter: '+n2);
   }
 
-  // ---------- Graf ----------
   let canvas, ctx, dpr;
   function resizeCanvas(){
     if(!canvas) return;
@@ -607,7 +591,7 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
       if(showSpeed)drawLine(SP, '#2563eb', ySpeed, 1);
       if(showRPE)  drawLine(RP, '#d97706', yRPE, 1);
 
-      // --- Ghost overlay (tidsjustert snitt) ---
+      // Ghost overlay (tidsjustert snitt)
       const ghostEnabled = document.getElementById('ghost-enable')?.checked ?? false;
       if (ghostEnabled && STATE.ghost && STATE.ghost.avg && STATE.workout && STATE.workout.startedAt) {
         const g = STATE.ghost.avg;
@@ -634,7 +618,6 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     }
   }
 
-  // ---------- Ghost ----------
   function buildGhostList(){
     const list=el('ghost-list'); if(!list) return; list.innerHTML='';
     const sessions = getNS('sessions',[]);
@@ -678,7 +661,6 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     STATE.ghost.avg={dur:maxDur, hr:avgHR, w:avgW};
   }
 
-  // ---------- Remaining (tar hensyn til skip) ----------
   function computeRemainingSec(w){
     if(!w) return 0;
     const obj = JSON.parse(JSON.stringify(w));
@@ -741,7 +723,6 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     return Math.max(0, Math.round(remaining));
   }
 
-  // ---------- Øktstatus ----------
   function avgOf(arr){ if(!arr.length) return null; return arr.reduce((a,b)=>a+b,0)/arr.length; }
   function computeLastWorkMetrics(){
     const pts = STATE.logger.points || [];
@@ -793,7 +774,6 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     lst.textContent = spTxt + ' · ' + hrTxt;
   }
 
-  // ---------- Start uten HR modal ----------
   function ensureModalCompatOrStart(){
     const m=el('nohr-modal');
     if(!m){
@@ -803,7 +783,6 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     m.classList.add('open');
   }
 
-  // ---------- INIT ----------
   function init(){
     try{
       for(const a of (document.getElementById('topbar')?.querySelectorAll('a')||[]))
@@ -818,17 +797,18 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
         }
       });
 
-      // Enhetsknapper
+      // Init status (frakoblet til å begynne med)
+      setDeviceStatus('hr', false);
+      setDeviceStatus('tm', false);
+
       el('connect-hr')?.addEventListener('click', connectHR);
       el('connect-treadmill')?.addEventListener('click', connectTreadmill);
 
-      // RPE
       el('rpe-dec')?.addEventListener('click', ()=> applyRPEChange(-0.5));
       el('rpe-inc')?.addEventListener('click', ()=> applyRPEChange(+0.5));
       el('rpe-now')?.addEventListener('change', ()=> applyRPEChange(0));
       setRPE(getNS('lastRPE', 0));
 
-      // Manuelle kontroller
       for(const btn of document.querySelectorAll('.speed-btn'))
         btn.addEventListener('click', (ev)=> setSpeed(Number(ev.currentTarget.dataset.speed)) );
       el('manual-speed')?.addEventListener('change',()=> setSpeed(el('manual-speed').value));
@@ -840,12 +820,10 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
       for(const btn of document.querySelectorAll('.grade-btn'))
         btn.addEventListener('click', (ev)=> setGrade(Number(ev.currentTarget.dataset.grade||0)) );
 
-      // no-HR modal
       el('nohr-cancel')?.addEventListener('click', ()=> el('nohr-modal')?.classList.remove('open'));
       el('nohr-start') ?.addEventListener('click', ()=>{ el('nohr-modal')?.classList.remove('open'); startTicker(); });
       el('nohr-connect')?.addEventListener('click', async ()=>{ el('nohr-modal')?.classList.remove('open'); await connectHR(); });
 
-      // Start/Pause
       el('btn-start-pause')?.addEventListener('click', async ()=>{
         if(!STATE.workout){
           const sel=el('workout-select'); const customs=loadCustomWorkouts();
@@ -859,7 +837,6 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
         else { stopTicker(); }
       });
 
-      // Skip/lagre/forkast
       el('btn-skip-fwd')?.addEventListener('click', ()=>{
         const w=STATE.workout; if(!w) return;
         if(w.phase==='warmup'){ w.tLeft=0; nextPhase(); }
@@ -885,11 +862,9 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
         }
       });
 
-      // Canvas + graf
       canvas=el('chart'); ctx=canvas?.getContext('2d'); dpr=window.devicePixelRatio||1;
       window.addEventListener('resize', resizeCanvas); resizeCanvas();
 
-      // Ghost-meny
       el('ghost-picker')?.addEventListener('click', (e)=>{
         e.stopPropagation(); el('ghost-menu')?.classList.remove('hidden'); buildGhostList();
       });
@@ -912,12 +887,10 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
         draw(); // vis ghost umiddelbart
       });
 
-      // Forvalg og fallback
       populateWorkoutSelect();
       preselectIfRequested();
       ensureDefaultSelected();
 
-      // 1s-løkke
       setInterval(()=>{
         try{
           const t=Date.now();
