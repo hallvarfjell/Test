@@ -1,10 +1,5 @@
-// INTZ v10.1  ➜  Patch: Øktstatus + TSS/høydemeter + felles småforbedringer
-// ---------------------------------------------------------------------------------
-// Denne utgaven inkluderer:
-//  - STATE.metrics { elevGainM, tss } + beregning per sekund i writeSample(t)
-//  - STATE.totalSec settes når økt velges (for gjenstående tid i Øktstatus)
-//  - computeLastWorkMetrics() + updateStatusCard() (kalles hvert sekund)
-//  - Ellers samme struktur/IDs som v10.1 (UI og graf uendret)
+// INTZ v10.1  ➜  Patch: Øktstatus-forbedringer (elapsed=0 uten aktiv økt, riktig remaining ved skip,
+// "Siste drag" uten labels) + auto-forvalg av første mal når ingen er valgt.
 
 function activeUser(){ return localStorage.getItem('active_user') || 'default'; }
 function nsKey(k){ return 'u:'+activeUser()+':'+k; }
@@ -49,8 +44,8 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     logger:{active:false, points:[], startTs:null, dist:0},
     ghost:{enabled:false, ids:new Set(), avg:null},
     cal:{K:Number(getNS('calK',1.0)), Crun:Number(getNS('cRun',1.0))},
-    // ➜ Nye metrikker akkumuleres i sanntid:
-    metrics:{elevGainM:0, tss:0}
+    metrics:{elevGainM:0, tss:0},     // ➜ akkumuleres i sanntid
+    totalSec:0                        // ➜ total varighet for valgt økt (brukes ved behov)
   };
 
   function clamp(n,min,max){ return Math.min(max, Math.max(min,n)); }
@@ -85,7 +80,7 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     }catch(e){ console.error(e); alert('Kunne ikke koble til pulsbelte: '+e); }
   }
 
-  // ---- FTMS tredemølle (0x1826), Treadmill Data (0x2ACD) ----
+  // ---- FTMS tredemølle ----
   async function connectTreadmill(){
     try{
       if(!('bluetooth' in navigator)) return alert('Nettleseren støtter ikke Web Bluetooth');
@@ -108,20 +103,16 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
         let i = 0;
         const flags = dv.getUint16(i, true); i += 2;
 
-        // Instantaneous Speed (obligatorisk): uint16, 0.01 km/t
         const instSpeedKmh = dv.getUint16(i, true) / 100; i += 2;
         setSpeed(instSpeedKmh);
 
-        // (bit1) Average Speed (uint16) – hopp over
-        if (flags & (1 << 1)) i += 2;
-        // (bit2) Total Distance (uint24) – hopp over
-        if (flags & (1 << 2)) i += 3;
-        // (bit3) Inclination (sint16, 0.1%) + Ramp Angle (sint16, 0.1°)
+        if (flags & (1 << 1)) i += 2; // avg speed
+        if (flags & (1 << 2)) i += 3; // total distance
         if (flags & (1 << 3)) {
           const incline01pct = dv.getInt16(i, true); i += 2;
           const rampAngle01d = dv.getInt16(i, true); i += 2;
           setGrade(incline01pct / 10);
-          void rampAngle01d; // ikke brukt nå
+          void rampAngle01d;
         }
       });
 
@@ -194,11 +185,10 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
         const cw=loadCustomWorkouts()[idx];
         if(cw){
           STATE.workout=workoutFromCfg(cw);
-          updateWorkoutUI();
-          // ➜ lagre total varighet for Øktstatus (gjenstående tid)
           STATE.totalSec = computeTotalDur(cw);
+          updateWorkoutUI();
           setNS('lastPreset','custom:'+idx);
-          const sd=el('sel-dur'); if(sd) sd.textContent = fmtMMSS(computeTotalDur(cw));
+          const sd=el('sel-dur'); if(sd) sd.textContent = fmtMMSS(STATE.totalSec);
         }
       }
     });
@@ -210,30 +200,30 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
       const arr=loadCustomWorkouts(); const i=Number(ar.index||0); const cw=arr[i];
       if(cw){
         const sel=el('workout-select'); if(sel){ sel.value='c:'+i; }
-        STATE.workout=workoutFromCfg(cw); updateWorkoutUI();
+        STATE.workout=workoutFromCfg(cw);
         STATE.totalSec = computeTotalDur(cw);
-        const sd=el('sel-dur'); if(sd) sd.textContent = fmtMMSS(computeTotalDur(cw));
+        updateWorkoutUI();
+        const sd=el('sel-dur'); if(sd) sd.textContent = fmtMMSS(STATE.totalSec);
       }
     }
     delNS('preselect');
   }
 
-  function startTicker(){
-    if(STATE.ticker) return;
-    if(STATE.workout && !STATE.workout.startedAt){
-      STATE.workout.startedAt=new Date().toISOString();
-      if(!STATE.logger.active) startLogger();
-    }
-    STATE.ticker=setInterval(tickWorkout,1000);
-    toggleStartPauseUI(true);
-  }
-  function stopTicker(){ if(STATE.ticker){ clearInterval(STATE.ticker); STATE.ticker=null; } toggleStartPauseUI(false); }
-  function toggleStartPauseUI(running){
-    const icon=el('sp-icon'), label=el('sp-label'); if(!icon || !label) return;
-    if(running){ icon.className='ph-pause'; label.textContent='Pause'; }
-    else{ icon.className='ph-play'; label.textContent='Start'; }
+  // ➜ Auto-forvalg av første mal hvis ingen er valgt/forvalgt:
+  function ensureDefaultSelected(){
+    if(STATE.workout) return;
+    const customs=loadCustomWorkouts();
+    if(!customs.length) return;
+    const sel=el('workout-select');
+    if(sel){ sel.value='c:0'; }
+    const cw = customs[0];
+    STATE.workout = workoutFromCfg(cw);
+    STATE.totalSec = computeTotalDur(cw);
+    updateWorkoutUI();
+    const sd=el('sel-dur'); if(sd) sd.textContent = fmtMMSS(STATE.totalSec);
   }
 
+  // --- Fase-maskin (samme logikk som før) -----------------------------------
   function nextPhase(){
     const w=STATE.workout; if(!w) return;
     if(w.phase==='warmup'){
@@ -324,7 +314,7 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     updateWorkoutUI();
   }
 
-  // Ytre arbeid i løp (estimat)
+  // Estimer watt
   function estimateWattExternal(speedKmh, gradePct, massKg, Crun, K){
     const g=9.81, v=(speedKmh||0)/3.6, grade=(gradePct||0)/100;
     const mech = massKg * (g * v * grade + Crun * v);
@@ -339,7 +329,7 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     const speed_ms=dispSpeed/3.6;
     const w=estimateWattExternal(dispSpeed, STATE.gradePct, STATE.massKg, STATE.cal.Crun, STATE.cal.K);
     const wstate=STATE.workout;
-    // dist
+
     STATE.logger.dist += speed_ms * (STATE.logger.points.length? (t-STATE.logger.points[STATE.logger.points.length-1].ts)/1000 : 0);
 
     STATE.logger.points.push({
@@ -348,16 +338,16 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
       phase:wstate?wstate.phase:'', rep:wstate&&wstate.phase==='work'?wstate.rep:0, watt:w
     });
 
-    // ➜ Akkumulering: høydemeter og TSS
+    // ➜ høydemeter + TSS
     try{
       const last=STATE.logger.points.length>1? STATE.logger.points[STATE.logger.points.length-2]: null;
       if(last){
         const dt=(t - last.ts)/1000;
         const gradeFrac = (STATE.gradePct||0)/100;
-        const dh = speed_ms * gradeFrac * dt;      // vertikal meter per sekund
+        const dh = speed_ms * gradeFrac * dt;
         if(dh>0) STATE.metrics.elevGainM += dh;
 
-        const LTHR = STATE.LT2||160;               // LT2 brukes som LTHR-proxy
+        const LTHR = STATE.LT2||160;
         const hr = STATE.hr||0;
         const ifHr = LTHR>0? (hr/LTHR):0;
         STATE.metrics.tss += (dt/3600) * (ifHr*ifHr) * 100;
@@ -496,7 +486,7 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     el('next2').textContent='Deretter: '+n2;
   }
 
-  // --- Graf (samme som før) --------------------------------------------------
+  // --- Graf (uendret) --------------------------------------------------------
   let canvas, ctx, dpr;
   function resizeCanvas(){
     if(!canvas) return;
@@ -531,7 +521,6 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
       const wVals  = WT.map(p=>p.y).filter(v=>v!=null);
       const sVals  = SP.map(p=>p.y).filter(v=>v!=null);
 
-      // Axis locks
       const lockHR = getNS('hrLock', false);
       let hrMin = lockHR? Number(getNS('hrMin',80))  : (hrVals.length? Math.min(...hrVals):80);
       let hrMax = lockHR? Number(getNS('hrMax',200)) : (hrVals.length? Math.max(...hrVals):200);
@@ -557,19 +546,17 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
       const ySpeed= v => padT + (1 - (v-sMin)/Math.max(1,(sMax-sMin)))    *plotH;
       const yRPE  = v => padT + (1 - (v-rMin)/Math.max(1,(rMax-rMin)))    *plotH;
 
-      // LT-bånd
       const LT1 = STATE.LT1, LT2 = STATE.LT2;
       const yLT1 = yHR(LT1), yLT2 = yHR(LT2);
       ctx.save();
-      ctx.fillStyle = 'rgba(220,38,38,0.10)'; // over LT2
+      ctx.fillStyle = 'rgba(220,38,38,0.10)';
       ctx.fillRect(padL, padT, plotW, Math.max(0, yLT2-padT));
-      ctx.fillStyle = 'rgba(217,119,6,0.08)'; // LT1-LT2
+      ctx.fillStyle = 'rgba(217,119,6,0.08)';
       ctx.fillRect(padL, Math.max(padT,yLT2), plotW, Math.max(0, Math.min(H-padB, yLT1) - Math.max(padT, yLT2)));
-      ctx.fillStyle = 'rgba(22,163,74,0.08)'; // under LT1
+      ctx.fillStyle = 'rgba(22,163,74,0.08)';
       ctx.fillRect(padL, Math.max(padT,yLT1), plotW, Math.max(0, (H-padB) - Math.max(padT, yLT1)));
       ctx.restore();
 
-      // Minuttgrid
       ctx.strokeStyle='#e2e8f0'; ctx.lineWidth=1*dpr; ctx.beginPath();
       const windowSec = STATE.windowSec;
       for(let sec=0; sec<=windowSec; sec+=60){
@@ -578,7 +565,6 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
       }
       ctx.stroke();
 
-      // Y labels
       ctx.fillStyle='#ef4444'; ctx.font=`${12*dpr}px system-ui`; ctx.textAlign='left';
       const hrTick = Math.max(10, Math.round((hrMax-hrMin)/6/10)*10);
       for(let v=Math.ceil(hrMin/hrTick)*hrTick; v<=hrMax; v+=hrTick){ ctx.fillText(String(v), 8*dpr, yHR(v)+4*dpr); }
@@ -613,7 +599,7 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     }
   }
 
-  // --- Ghost (utvalg/average) ------------------------------------------------
+  // --- Ghost (uendret) -------------------------------------------------------
   function buildGhostList(){
     const list=el('ghost-list'); if(!list) return; list.innerHTML='';
     const sessions = getNS('sessions',[]);
@@ -657,21 +643,76 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     STATE.ghost.avg={dur:maxDur, hr:avgHR, w:avgW};
   }
 
-  function ensureModalCompatOrStart(){
-    const m=el('nohr-modal');
-    if(!m){
-      const want=confirm('Pulsbelte ikke tilkoblet. Koble til nå?');
-      if(want) return connectHR(); else return startTicker();
+  // --- Ny: beregn gjenstående fra faktisk state ------------------------------
+  function computeRemainingSec(w){
+    if(!w) return 0;
+    const obj = JSON.parse(JSON.stringify(w)); // klon
+    function phaseDur(o){
+      if(o.phase==='warmup')     return Number(o.warmupSec||0);
+      if(o.phase==='cooldown')   return Number(o.cooldownSec||0);
+      if(o.phase==='seriesrest') return Number(o.series[o.sIdx].seriesRestSec||0);
+      if(o.phase==='rest')       return Number(o.series[o.sIdx].restSec||0);
+      if(o.phase==='work')       return Number(o.series[o.sIdx].workSec||0);
+      return 0;
     }
-    m.classList.add('open');
+    function adv(o){
+      if(o.phase==='warmup'){
+        if(o.series && o.series.length){
+          o.phase='work'; o.sIdx=0; o.rep=1; o.tLeft=o.series[0].workSec||0;
+          if(o.tLeft===0){ o.phase='rest'; o.tLeft=o.series[0].restSec||0; }
+        } else { o.phase='cooldown'; o.tLeft=o.cooldownSec; }
+        return;
+      }
+      if(o.phase==='work'){
+        const s=o.series[o.sIdx];
+        if(o.rep < s.reps){ o.phase='rest'; o.tLeft=s.restSec||0; return; }
+        if(o.sIdx < o.series.length-1){
+          const sr=s.seriesRestSec||0; if(sr>0){ o.phase='seriesrest'; o.tLeft=sr; return; }
+          o.sIdx++; o.phase='work'; o.rep=1; o.tLeft=o.series[o.sIdx].workSec||0;
+          if(o.tLeft===0){ o.phase='rest'; o.tLeft=o.series[o.sIdx].restSec||0; }
+          return;
+        }
+        o.phase='cooldown'; o.tLeft=o.cooldownSec; return;
+      }
+      if(o.phase==='rest'){
+        const s=o.series[o.sIdx];
+        if(o.rep < s.reps){
+          o.rep++; o.phase='work'; o.tLeft=s.workSec||0;
+          if(o.tLeft===0){ o.phase='rest'; o.tLeft=s.restSec||0; }
+          return;
+        }
+        if(o.sIdx < o.series.length-1){
+          const sr=s.seriesRestSec||0; if(sr>0){ o.phase='seriesrest'; o.tLeft=sr; return; }
+          o.sIdx++; o.phase='work'; o.rep=1; o.tLeft=o.series[o.sIdx].workSec||0;
+          if(o.tLeft===0){ o.phase='rest'; o.tLeft=o.series[o.sIdx].restSec||0; }
+          return;
+        }
+        o.phase='cooldown'; o.tLeft=o.cooldownSec; return;
+      }
+      if(o.phase==='seriesrest'){
+        o.sIdx++; o.phase='work'; o.rep=1; o.tLeft=o.series[o.sIdx].workSec||0;
+        if(o.tLeft===0){ o.phase='rest'; o.tLeft=o.series[o.sIdx].restSec||0; }
+        return;
+      }
+      if(o.phase==='cooldown'){ o.phase='done'; o.tLeft=0; return; }
+    }
+    // Start: ta med gjenværende i nåværende fase
+    let remaining = Number(obj.tLeft||0);
+    // Deretter addér alle full-lengde faser videre til 'done'
+    let guard=0;
+    while(obj.phase!=='done' && guard++<10000){
+      adv(obj);
+      if(obj.phase==='done') break;
+      remaining += phaseDur(obj);
+    }
+    return Math.max(0, Math.round(remaining));
   }
 
-  // --- Øktstatus (NY) --------------------------------------------------------
+  // --- Øktstatus (oppdatert) -------------------------------------------------
   function avgOf(arr){ if(!arr.length) return null; return arr.reduce((a,b)=>a+b,0)/arr.length; }
   function computeLastWorkMetrics(){
     const pts = STATE.logger.points || [];
     if(pts.length===0) return {speed:null, hr20:null};
-    // Finn siste indeks i work-fase
     let j=pts.length-1;
     while(j>=0 && (pts[j].phase!=='work')) j--;
     if(j<0) return {speed:null, hr20:null};
@@ -693,18 +734,32 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     const tss = document.getElementById('st-tss');
     const lst = document.getElementById('st-last');
     if(!elp||!dst||!elv||!tss||!lst) return;
-    const now = Date.now();
-    const start = STATE.logger.startTs||now;
-    const elapsed = Math.max(0, Math.round((now - start)/1000));
-    const total = STATE.totalSec||0;
-    const remaining = Math.max(0, total - elapsed);
+
+    let elapsed = 0, remaining = 0;
+
+    if(STATE.workout){
+      // ➜ Påløpt = 0 hvis økt ikke er aktiv (ikke startet eller ikke ticker)
+      if(STATE.workout.startedAt && STATE.ticker){
+        const now = Date.now();
+        const start = new Date(STATE.workout.startedAt).getTime() || now;
+        elapsed = Math.max(0, Math.round((now - start)/1000));
+      } else {
+        elapsed = 0;
+      }
+      remaining = computeRemainingSec(STATE.workout);
+    }
+
     elp.textContent = fmtMMSS(elapsed);
-    rem.textContent = (total>0? fmtMMSS(remaining): '--:--');
+    rem.textContent = (remaining>0? fmtMMSS(remaining) : (STATE.workout? '00:00' : '--:--'));
     dst.textContent = (STATE.logger.dist/1000).toFixed(2)+ ' km';
     elv.textContent = Math.round(STATE.metrics.elevGainM) + ' m';
     tss.textContent = Math.round(STATE.metrics.tss);
+
     const m = computeLastWorkMetrics();
-    lst.textContent = 'Fart ' + (m.speed!=null? m.speed.toFixed(1):'--') + ' km/t · HR20 ' + (m.hr20!=null? m.hr20:'--') + ' bpm';
+    // ➜ uten labels
+    const spTxt = (m.speed!=null? m.speed.toFixed(1):'--') + ' km/t';
+    const hrTxt = (m.hr20!=null? m.hr20:'--') + ' bpm';
+    lst.textContent = spTxt + ' · ' + hrTxt;
   }
 
   // --- INIT ------------------------------------------------------------------
@@ -815,10 +870,12 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
         computeGhostAverage(); el('ghost-menu')?.classList.add('hidden');
       });
 
+      // Velg / forvelg / default
       populateWorkoutSelect();
       preselectIfRequested();
+      ensureDefaultSelected();
 
-      // 1s loop: sample → serier → UI → graf → statuskort
+      // 1s loop
       setInterval(()=>{
         try{
           const t=Date.now();
@@ -839,7 +896,6 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
 
           draw();
           if(STATE.logger.active){ writeSample(t); }
-          // ➜ Oppdater Øktstatus
           updateStatusCard();
         }catch(e){ showErr(e); }
       },1000);
