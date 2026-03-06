@@ -1,8 +1,13 @@
-// INTZ v10.1  – Stabilisert hovedlogikk
-// - Alle refererte funksjoner er definert og hoistes (function declarations)
-// - Øktstatus: elapsed=0 når ikke aktiv; remaining tar hensyn til skip
-// - "Siste drag": uten labels (kun "XX.X km/t · YY bpm")
-// - Auto-forvalg: første lagrede mal velges ved start hvis ingen annen er valgt
+// INTZ v10.1 – Stabil hovedlogikk + Ghost overlay + Øktstatus-forbedringer
+// Build ID: 2026-03-06_ghost-overlay_v2
+// Endringer:
+//  - Ghost overlay tegnes i draw() (HR/Watt, semitransparent)
+//  - Redraw etter “Bruk” i ghost-menyen (draw())
+//  - Øktstatus: elapsed=0 når ikke aktiv; remaining tar hensyn til skip
+//  - “Siste drag”: uten labels (kun "XX.X km/t · YY bpm")
+//  - Auto-forvalg: første mal velges hvis ingen annen er valgt
+//  - Ekstra null-sjekker for å hindre early-crash
+console.info('[INTZ] main.js loaded: 2026-03-06_ghost-overlay_v2');
 
 function activeUser(){ return localStorage.getItem('active_user') || 'default'; }
 function nsKey(k){ return 'u:'+activeUser()+':'+k; }
@@ -27,6 +32,7 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
       errCard()?.classList.remove('hidden');
       const msg = (e && e.stack) ? e.stack : (e?.message || String(e));
       errLog() && (errLog().textContent += msg + '\n');
+      console.error('[INTZ] Runtime error:', e);
     }catch(_){}
   }
   window.addEventListener('error', e => showErr(e.error || e.message));
@@ -47,8 +53,8 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     logger:{active:false, points:[], startTs:null, dist:0},
     ghost:{enabled:false, ids:new Set(), avg:null},
     cal:{K:Number(getNS('calK',1.0)), Crun:Number(getNS('cRun',1.0))},
-    metrics:{elevGainM:0, tss:0},   // akkumuleres
-    totalSec:0                      // total varighet for valgt økt (info)
+    metrics:{elevGainM:0, tss:0},
+    totalSec:0
   };
 
   // ---------- Utils ----------
@@ -90,7 +96,6 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
   async function connectTreadmill(){
     try{
       if(!('bluetooth' in navigator)) return alert('Nettleseren støtter ikke Web Bluetooth');
-
       const device = await navigator.bluetooth.requestDevice({ filters:[{ services:[0x1826] }] });
       const server = await device.gatt.connect();
       const ftms  = await server.getPrimaryService(0x1826);
@@ -109,7 +114,6 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
         let i = 0;
         const flags = dv.getUint16(i, true); i += 2;
 
-        // Instantaneous Speed (obligatorisk): uint16, 0.01 km/t
         const instSpeedKmh = dv.getUint16(i, true) / 100; i += 2;
         setSpeed(instSpeedKmh);
 
@@ -479,7 +483,8 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     if(!tmr || !bar || !cs){ return; }
     if(!STATE.workout){
       cs.textContent='Ingen økt valgt'; tmr.textContent='00:00'; bar.style.width='0%';
-      el('next1').textContent='Neste: –'; el('next2').textContent='Deretter: –';
+      el('next1') && (el('next1').textContent='Neste: –');
+      el('next2') && (el('next2').textContent='Deretter: –');
       return;
     }
     const w=STATE.workout; cs.textContent=stepName();
@@ -493,8 +498,8 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     const pct=Math.min(100, Math.max(0, 100*(1 - (w.tLeft/Math.max(1,total)))));
     bar.style.width=`${pct}%`;
     const [n1,n2]=computeNextSteps();
-    el('next1').textContent='Neste: '+n1;
-    el('next2').textContent='Deretter: '+n2;
+    el('next1') && (el('next1').textContent='Neste: '+n1);
+    el('next2') && (el('next2').textContent='Deretter: '+n2);
   }
 
   // ---------- Graf ----------
@@ -601,23 +606,23 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
       if(showWatt) drawLine(WT, '#16a34a', yWatt, 1);
       if(showSpeed)drawLine(SP, '#2563eb', ySpeed, 1);
       if(showRPE)  drawLine(RP, '#d97706', yRPE, 1);
- // --- Ghost overlay (tidsjustert snitt) ---
- const ghostEnabled = document.getElementById('ghost-enable')?.checked ?? false;
- if (ghostEnabled && STATE.ghost && STATE.ghost.avg && STATE.workout && STATE.workout.startedAt) {
-   const g = STATE.ghost.avg;
-   const startTs = new Date(STATE.workout.startedAt).getTime();
-   const gHR = [], gW = [];
-   for (let t = xmin; t <= xmax; t += 1000) {
-     const sec = Math.floor((t - startTs) / 1000);
-     if (sec >= 0 && sec <= g.dur) {
-       if (g.hr[sec] != null) gHR.push({ t, y: g.hr[sec] });
-       if (g.w[sec]  != null) gW .push({ t, y: g.w [sec]  });
-     }
-   }
-   if (showHR   && gHR.length > 1) drawLine(gHR, '#ef4444', yHR,   0.35);
-   if (showWatt && gW .length > 1) drawLine(gW,  '#16a34a', yWatt, 0.35);
- }
 
+      // --- Ghost overlay (tidsjustert snitt) ---
+      const ghostEnabled = document.getElementById('ghost-enable')?.checked ?? false;
+      if (ghostEnabled && STATE.ghost && STATE.ghost.avg && STATE.workout && STATE.workout.startedAt) {
+        const g = STATE.ghost.avg;
+        const startTs = new Date(STATE.workout.startedAt).getTime();
+        const gHR = [], gW = [];
+        for (let t = xmin; t <= xmax; t += 1000) {
+          const sec = Math.floor((t - startTs) / 1000);
+          if (sec >= 0 && sec <= g.dur) {
+            if (g.hr[sec] != null) gHR.push({ t, y: g.hr[sec] });
+            if (g.w[sec]  != null) gW .push({ t, y: g.w [sec]  });
+          }
+        }
+        if (showHR   && gHR.length > 1) drawLine(gHR, '#ef4444', yHR,   0.35);
+        if (showWatt && gW .length > 1) drawLine(gW,  '#16a34a', yWatt, 0.35);
+      }
 
       // Slope (20s - 120s)
       function avgSince(arr, tmin){ const xs=arr.filter(p=>p.t>=tmin).map(p=>p.y).filter(v=>v!=null); if(!xs.length) return null; return xs.reduce((a,b)=>a+b,0)/xs.length; }
@@ -625,7 +630,7 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
       const slopeVal=(a20!=null && a120!=null)? Math.round(a20-a120) : null;
       const slopeEl=document.getElementById('slope'); if(slopeEl) slopeEl.textContent = (slopeVal==null? '--': String(slopeVal));
     }catch(e){
-      try{ document.getElementById('err-card')?.classList.remove('hidden'); const L=document.getElementById('err-log'); if(L) L.textContent += (e?.stack||e?.message||String(e))+"\n"; }catch(_){}
+      showErr(e);
     }
   }
 
@@ -766,7 +771,6 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     let elapsed = 0, remaining = 0;
 
     if(STATE.workout){
-      // elapsed = 0 hvis ikke aktiv økt (ikke startet eller ikke ticker)
       if(STATE.workout.startedAt && STATE.ticker){
         const now = Date.now();
         const start = new Date(STATE.workout.startedAt).getTime() || now;
@@ -903,10 +907,10 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
       el('ghost-apply')?.addEventListener('click', ()=>{
         const checks=el('ghost-list')?.querySelectorAll('input[type=checkbox]');
         STATE.ghost.ids=new Set(Array.from(checks||[]).filter(c=>c.checked).map(c=>c.value));
-        computeGhostAverage(); el('ghost-menu')?.classList.add('hidden');
-      }
-  draw();
-});
+        computeGhostAverage();
+        el('ghost-menu')?.classList.add('hidden');
+        draw(); // vis ghost umiddelbart
+      });
 
       // Forvalg og fallback
       populateWorkoutSelect();
@@ -929,8 +933,8 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
             const arr=STATE.series[k]; while(arr.length && arr[0].t<cutoff) arr.shift();
           }
 
-          if(el('pulse')) el('pulse').textContent = (STATE.hr!=null?STATE.hr:'--');
-          if(el('watt'))  el('watt').textContent = w||'--';
+          el('pulse') && (el('pulse').textContent = (STATE.hr!=null?STATE.hr:'--'));
+          el('watt')  && (el('watt').textContent = w||'--');
 
           draw();
           if(STATE.logger.active){ writeSample(t); }
