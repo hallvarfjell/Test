@@ -61,3 +61,5 @@ button.ghost{background:transparent;border-color:#cbd5e1}
 .warning{border-color:#fecaca;background:#fff7ed}
 .warning h3{margin-top:0}
 #err-log{white-space:pre-wrap}
+
+.bigstat{font-variant-numeric:tabular-nums;font-size:22px;line-height:1.1;font-weight:600}
