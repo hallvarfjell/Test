@@ -601,6 +601,23 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
       if(showWatt) drawLine(WT, '#16a34a', yWatt, 1);
       if(showSpeed)drawLine(SP, '#2563eb', ySpeed, 1);
       if(showRPE)  drawLine(RP, '#d97706', yRPE, 1);
+ // --- Ghost overlay (tidsjustert snitt) ---
+ const ghostEnabled = document.getElementById('ghost-enable')?.checked ?? false;
+ if (ghostEnabled && STATE.ghost && STATE.ghost.avg && STATE.workout && STATE.workout.startedAt) {
+   const g = STATE.ghost.avg;
+   const startTs = new Date(STATE.workout.startedAt).getTime();
+   const gHR = [], gW = [];
+   for (let t = xmin; t <= xmax; t += 1000) {
+     const sec = Math.floor((t - startTs) / 1000);
+     if (sec >= 0 && sec <= g.dur) {
+       if (g.hr[sec] != null) gHR.push({ t, y: g.hr[sec] });
+       if (g.w[sec]  != null) gW .push({ t, y: g.w [sec]  });
+     }
+   }
+   if (showHR   && gHR.length > 1) drawLine(gHR, '#ef4444', yHR,   0.35);
+   if (showWatt && gW .length > 1) drawLine(gW,  '#16a34a', yWatt, 0.35);
+ }
+
 
       // Slope (20s - 120s)
       function avgSince(arr, tmin){ const xs=arr.filter(p=>p.t>=tmin).map(p=>p.y).filter(v=>v!=null); if(!xs.length) return null; return xs.reduce((a,b)=>a+b,0)/xs.length; }
@@ -887,7 +904,9 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
         const checks=el('ghost-list')?.querySelectorAll('input[type=checkbox]');
         STATE.ghost.ids=new Set(Array.from(checks||[]).filter(c=>c.checked).map(c=>c.value));
         computeGhostAverage(); el('ghost-menu')?.classList.add('hidden');
-      });
+      }
+  draw();
+});
 
       // Forvalg og fallback
       populateWorkoutSelect();
