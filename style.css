@@ -45,7 +45,7 @@ button.ghost{background:transparent;border-color:#cbd5e1}
 /* RPE helper */
 .rpe-help{margin-top:6px;color:#475569;font-size:12px;line-height:1.45}
 
-/* Modal (used by builder generator and no-HR prompt) */
+/* Modal */
 .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(15,23,42,0.4);z-index:200}
 .modal.open{display:flex}
 .modalpanel{background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);width:min(540px,96vw);padding:12px}
@@ -67,5 +67,38 @@ button.ghost{background:transparent;border-color:#cbd5e1}
 .warning h3{margin-top:0}
 #err-log{white-space:pre-wrap}
 
-/* (NY) Stor stat i Øktstatus-kortet */
+/* (NY) Øktstatus-tall */
 .bigstat{font-variant-numeric:tabular-nums;font-size:22px;line-height:1.1;font-weight:600}
+
+/* ======================= NYE STILER FOR DENNE BATCHEN ======================= */
+
+/* 1) Toppknapper med tilkoblingsstatus */
+.btn-device{
+  display:inline-flex; align-items:center; gap:8px;
+  background:#f8fafc; border:2px solid #e2e8f0; color:#0b1020;
+  padding:8px 12px; border-radius:12px; font-weight:600;
+}
+.btn-device i{ font-size:18px; line-height:1; }
+.btn-device.connected{ border-color:#16a34a; box-shadow:0 0 0 3px rgba(22,163,74,0.18); }
+.btn-device.disconnected{ border-color:#dc2626; box-shadow:0 0 0 3px rgba(220,38,38,0.15); }
+
+/* 2) Maksimer +/- uten å vokse panelet: store kvadratiske knapper som brytes til ny rad ved behov */
+.giantbtn{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:clamp(44px, 9vw, 72px); height:clamp(44px, 9vw, 72px);
+  border-radius:14px; border:2px solid #cbd5e1; background:#e2e8f0;
+  font-size:clamp(22px, 3vw, 32px); line-height:1; font-weight:700; color:#0b1020;
+}
+.giantbtn:active{ transform:translateY(1px); }
+
+/* 3) Grid for fart/stigning som bruker bredden bedre */
+.sg-grid{ display:grid; gap:8px; }
+.sg-row{ display:grid; grid-template-columns: auto 1fr auto; gap:8px; align-items:center; }
+.sg-center{ display:grid; grid-template-columns: 1fr; gap:4px; justify-items:center; }
+.sg-center input{ width:120px; text-align:center; font-weight:600; }
+
+/* 4) RPE +/- like store som fart/stigning */
+.rpe-compact .iconbtn{ width:clamp(44px, 9vw, 72px); height:clamp(44px, 9vw, 72px); border-width:2px; font-size:clamp(22px, 3vw, 32px); border-radius:14px; }
+
+/* 5) Skjul lokale overskrifter i panelet (hvis de finnes) */
+#speed-grade-card h3, #ftms-status{ display:none; }
