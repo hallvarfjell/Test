@@ -624,5 +624,89 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
       if (ghostEnabled && STATE.ghost && STATE.ghost.avg && STATE.workout && STATE.workout.startedAt) {
         const g = STATE.ghost.avg;
         const startTs = new Date(STATE.workout.startedAt).getTime();
-        const gHR = [], gW = [];
-        for (let t = xmin; t <= xmax; t
+        const gHR = [], g=o.series[0].workSec||0;        const gHR = [], gW = [];
+          if(o.tLeft===0){ o.phase='rest'; o.tLeft=o.series[0].restSec||0; }
+        } else { o.phase='cooldown'; o.tLeft=o.cooldownSec; }
+        return;
+      }
+      if(o.phase==='work'){
+        const s=o.series[o.sIdx];
+        if(o.rep < s.re
+        for (let t = xmin; t <= xmax; t += 1000) {
+          const sec = Math.floor((t - startTs) / 1000);
+          if (sec >= 0 && sec <= g.dur) {
+            if (g.hr[sec] != null) gHR.push({ t, y: g.hr[sec] });
+            if (g.w[sec]  != null) gW .push({ t, y: g.w [sec]  });
+          }
+        }
+        if (showHR   && gHR.length > 1) drawLine(gHR, '#ef4444', yHR,   0.35);
+        if (showWatt && gW .length > 1) drawLine(gW,  '#16a34a', yWatt, 0.35);
+      }
+
+      // Slope (20s - 120s)
+      function avgSince(arr, tmin){ const xs=arr.filter(p=>p.t>=tmin).map(p=>p.y).filter(v=>v!=null); if(!xs.length) return null; return xs.reduce((a,b)=>a+b,0)/xs.length; }
+      const a20=avgSince(STATE.series.hr||[], now-20000), a120=avgSince(STATE.series.hr||[], now-120000);
+      const slopeVal=(a20!=null && a120!=null)? Math.round(a20-a120) : null;
+      const slopeEl=document.getElementById('slope'); if(slopeEl) slopeEl.textContent = (slopeVal==null? '--': String(slopeVal));
+    }catch(e){
+      showErr(e);
+    }
+  }
+
+  function buildGhostList(){
+    const list=el('ghost-list'); if(!list) return; list.innerHTML='';
+    const sessions = getNS('sessions',[]);
+    if(!sessions.length){
+      list.innerHTML='<div class="small" style="padding:6px 8px">Ingen lagrede økter</div>';
+      return;
+    }
+    sessions.slice().reverse().forEach(s=>{
+      const dt=new Date(s.startedAt||Date.now()).toLocaleString();
+      const id=s.id;
+      const row=document.createElement('label'); row.className='menu-item';
+      const cb=document.createElement('input'); cb.type='checkbox'; cb.value=id; cb.checked=STATE.ghost.ids.has(id);
+      const span=document.createElement('span'); span.textContent=`${s.name||'Økt'} – ${dt}`;
+      row.appendChild(cb); row.appendChild(span); list.appendChild(row);
+    });
+  }
+  function computeGhostAverage(){
+    const ids=Array.from(STATE.ghost.ids||[]);
+    const sessions=getNS('sessions',[]).filter(s=> ids.includes(s.id));
+    if(!sessions.length){ STATE.ghost.avg=null; return; }
+    const perSess = sessions.map(s=>{
+      const pts=s.points||[]; if(!pts.length) return {dur:0, hr:[], w:[]};
+      const t0=pts[0].ts; const tN=pts[pts.length-1].ts;
+      const dur=Math.max(0, Math.round((tN - t0)/1000));
+      const hr=new Array(dur+1).fill(null), w=new Array(dur+1).fill(null);
+      let idx=0;
+      for(let sec=0; sec<=dur; sec++){
+        const target=t0+sec*1000;
+        while(idx+1<pts.length && pts[idx+1].ts<=target) idx++;
+        const p=pts[idx]; hr[sec]=p.hr||0; w[sec]=Math.round(p.watt||0);
+      }
+      return {dur, hr, w};
+    });
+    const maxDur = Math.max(...perSess.map(x=>x.dur));
+    const avgHR=new Array(maxDur+1).fill(0); const avgW=new Array(maxDur+1).fill(0); const cnt=new Array(maxDur+1).fill(0);
+    perSess.forEach(ss=>{ for(let i=0;i<=ss.dur;i++){ if(ss.hr[i]!=null){ avgHR[i]+=ss.hr[i]; avgW[i]+=ss.w[i]; cnt[i]++; } } });
+    for(let i=0;i<=maxDur;i++){
+      if(cnt[i]>0){ avgHR[i]=Math.round(avgHR[i]/cnt[i]); avgW[i]=Math.round(avgW[i]/cnt[i]); }
+      else { avgHR[i]=null; avgW[i]=null; }
+    }
+    STATE.ghost.avg={dur:maxDur, hr:avgHR, w:avgW};
+  }
+
+  function computeRemainingSec(w){
+    if(!w) return 0;
+    const obj = JSON.parse(JSON.stringify(w));
+    function phaseDur(o){
+      if(o.phase==='warmup')     return Number(o.warmupSec||0);
+      if(o.phase==='cooldown')   return Number(o.cooldownSec||0);
+      if(o.phase==='seriesrest') return Number(o.series[o.sIdx].seriesRestSec||0);
+      if(o.phase==='rest')       return Number(o.series[o.sIdx].restSec||0);
+      if(o.phase==='work')       return Number(o.series[o.sIdx].workSec||0);
+      return 0;
+    }
+    function adv(o){
+      if(o.phase==='warmup'){
+        if(o.series && o.series.length){
