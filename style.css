@@ -1,6 +1,6 @@
 :root{
   --bg:#f7fafc; --card:#ffffff; --fg:#0b1020; --muted:#5f6b7a; --accent:#2563eb;
-  --ok:#16a34a; --warn:#d97706; --danger:#dc2626; --line:#e2e8f0;
+  --ok:#16a34a; --warn:#d97706; --danger:#dc2626; --line:#e5e7eb;
   --shadow:0 1px 2px rgba(0,0,0,.06), 0 1px 3px rgba(0,0,0,.1);
 }
 *{box-sizing:border-box}
@@ -8,12 +8,12 @@ html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--fg);font:16px system-ui,Segoe UI,Roboto,Helvetica,Arial}
 
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#ffffff;border-bottom:1px solid var(--line);box-shadow:var(--shadow)}
-.topbar a{color:#1d4ed8;text-decoration:none;margin-right:8px}
+.topbar a{color:var(--fg);text-decoration:none}
 .layout{display:grid;grid-template-columns: 480px 1fr;gap:16px;padding:16px}
 
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;box-shadow:var(--shadow)}
 .card h3{margin:4px 0 12px 0;font-size:16px}
-.small{font-size:12px;color:var(--muted)}
+.small{font-size:12px;color:#5f6b7a}
 .badge{background:#eef2ff;border:1px solid #c7d2fe;color:#0b1020;border-radius:999px;padding:2px 8px;font-size:12px}
 
 button{background:#eef2ff;color:#0b1020;border:1px solid #c7d2fe;border-radius:10px;padding:8px 12px;font-size:14px;cursor:pointer}
@@ -27,11 +27,12 @@ button.ghost{background:transparent;border-color:#cbd5e1}
 .graphwrap{height:340px}
 #chart,#r-chart{width:100%;height:100%;display:block}
 
-.nav{display:flex;gap:8px;align-items:center}
+.nav{display:flex;gap:8px}
+.nav a{color:#1d4ed8;text-decoration:none}
 .hidden{display:none}
 
 /* Ghost menu tweaks */
-.menu{background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
+.menu{background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:var(--shadow)}
 .menu .menu-item{display:flex;align-items:flex-start;gap:8px;padding:8px;line-height:1.25;border-bottom:1px solid #f1f5f9}
 .menu .menu-item:last-child{border-bottom:none}
 .menu .menu-item span{white-space:normal;word-break:break-word}
@@ -39,7 +40,7 @@ button.ghost{background:transparent;border-color:#cbd5e1}
 /* Controls */
 .controls .stepper input{width:88px}
 .controls .field{min-width:160px}
-.quickrow{display:flex;gap:6px;margin-top:4px;flex-wrap:wrap}
+.quickrow{display:flex;gap:6px;margin-top:4px}
 
 /* RPE helper */
 .rpe-help{margin-top:6px;color:#475569;font-size:12px;line-height:1.45}
@@ -52,7 +53,7 @@ button.ghost{background:transparent;border-color:#cbd5e1}
 .modalgrid{display:grid;grid-template-columns: 1fr 1fr;gap:8px}
 .modalactions{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
 
-/* Builder list rows (hvis brukt på andre sider) */
+/* Builder list rows */
 .rowline{display:flex;align-items:center;gap:8px;justify-content:space-between;border:1px solid var(--line);border-radius:10px;padding:8px;background:#fff}
 .row-left{display:flex;align-items:center;gap:8px;min-width:0}
 .row-handle{cursor:grab;color:#64748b}
@@ -66,12 +67,12 @@ button.ghost{background:transparent;border-color:#cbd5e1}
 .warning h3{margin-top:0}
 #err-log{white-space:pre-wrap}
 
-/* Øktstatus */
+/* (NY) Øktstatus-tall */
 .bigstat{font-variant-numeric:tabular-nums;font-size:22px;line-height:1.1;font-weight:600}
 
-/* ======================= NYE STILER ======================= */
+/* ======================= NYE STILER FOR DENNE BATCHEN ======================= */
 
-/* Toppknapper med tilkoblingsstatus */
+/* 1) Toppknapper med tilkoblingsstatus */
 .btn-device{
   display:inline-flex; align-items:center; gap:8px;
   background:#f8fafc; border:2px solid #e2e8f0; color:#0b1020;
@@ -81,7 +82,7 @@ button.ghost{background:transparent;border-color:#cbd5e1}
 .btn-device.connected{ border-color:#16a34a; box-shadow:0 0 0 3px rgba(22,163,74,0.18); }
 .btn-device.disconnected{ border-color:#dc2626; box-shadow:0 0 0 3px rgba(220,38,38,0.15); }
 
-/* Store ±-knapper uten at kortet vokser */
+/* 2) Maksimer +/- uten å vokse panelet: store kvadratiske knapper som brytes til ny rad ved behov */
 .giantbtn{
   display:inline-flex; align-items:center; justify-content:center;
   width:clamp(44px, 9vw, 72px); height:clamp(44px, 9vw, 72px);
@@ -90,20 +91,14 @@ button.ghost{background:transparent;border-color:#cbd5e1}
 }
 .giantbtn:active{ transform:translateY(1px); }
 
-/* Grid for fart/stigning */
+/* 3) Grid for fart/stigning som bruker bredden bedre */
 .sg-grid{ display:grid; gap:8px; }
 .sg-row{ display:grid; grid-template-columns: auto 1fr auto; gap:8px; align-items:center; }
 .sg-center{ display:grid; grid-template-columns: 1fr; gap:4px; justify-items:center; }
-.sg-center input{ width:120px; text-align:center; font-weight:700; }
+.sg-center input{ width:120px; text-align:center; font-weight:600; }
 
-/* Verdifelter – større font (RPE/fart/stigning) */
-.value-big{ font-variant-numeric:tabular-nums; font-size:clamp(24px, 3.2vw, 34px); line-height:1.1; font-weight:700; }
+/* 4) RPE +/- like store som fart/stigning */
+.rpe-compact .iconbtn{ width:clamp(44px, 9vw, 72px); height:clamp(44px, 9vw, 72px); border-width:2px; font-size:clamp(22px, 3vw, 32px); border-radius:14px; }
 
-/* RPE ± like store som fart/stigning */
-.rpe-compact .iconbtn{
-  width:clamp(44px, 9vw, 72px); height:clamp(44px, 9vw, 72px);
-  border-width:2px; font-size:clamp(22px, 3vw, 32px); border-radius:14px;
-}
-
-/* Skjul lokale overskrifter i fart/stigning-kortet og FTMS-statuslinje (ikke brukt lenger) */
+/* 5) Skjul lokale overskrifter i panelet (hvis de finnes) */
 #speed-grade-card h3, #ftms-status{ display:none; }

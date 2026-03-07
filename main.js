@@ -1,6 +1,6 @@
-// INTZ v10.1 – Stabil + Ghost overlay + Øktstatus + statusknapper + autorepeat + hurtigknapper
-// Build ID: 2026-03-06_quickkeys_repeat_v2
-console.info('[INTZ] main.js loaded: 2026-03-06_quickkeys_repeat_v2');
+// INTZ v10.1 – Stabil hovedlogikk + Ghost overlay + Øktstatus-forbedringer + status i toppknapper
+// Build ID: 2026-03-06_ui-maxkeys_v1
+console.info('[INTZ] main.js loaded: 2026-03-06_ui-maxkeys_v1');
 
 function activeUser(){ return localStorage.getItem('active_user') || 'default'; }
 function nsKey(k){ return 'u:'+activeUser()+':'+k; }
@@ -36,7 +36,7 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     6:"Moderat hard",7:"Hard",8:"Svært hard",9:"Nesten maksimal",10:"Maksimal innsats"
   };
 
-  // Toppknapper: sett kantfarge/status
+  // Tilkoblingsstatus i toppknappene
   function setDeviceStatus(kind, connected){
     const id = (kind==='hr') ? 'connect-hr' : 'connect-treadmill';
     const b = document.getElementById(id);
@@ -110,8 +110,8 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
         const instSpeedKmh = dv.getUint16(i, true) / 100; i += 2;
         setSpeed(instSpeedKmh);
 
-        if (flags & (1 << 1)) i += 2; // avg speed
-        if (flags & (1 << 2)) i += 3; // total distance
+        if (flags & (1 << 1)) i += 2;
+        if (flags & (1 << 2)) i += 3;
         if (flags & (1 << 3)) {
           const incline01pct = dv.getInt16(i, true); i += 2;
           const rampAngle01d = dv.getInt16(i, true); i += 2;
@@ -168,34 +168,6 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     }
     return total;
   }
-
-  // --- Autorepeat for langtrykk på ± ---
-  function addAutoRepeat(btnId, stepFn, firstDelay=350, repeatDelay=85){
-    const btn = el(btnId);
-    if(!btn) return;
-    let down = false, t1=null, t2=null;
-
-    const start = (ev)=>{
-      ev.preventDefault();
-      down = true;
-      stepFn(); // ett steg umiddelbart
-      t1 = setTimeout(()=>{ // etter litt → gjenta raskt
-        if(!down) return;
-        t2 = setInterval(()=>{ if(down) stepFn(); }, repeatDelay);
-      }, firstDelay);
-    };
-    const stop = ()=>{
-      down = false;
-      if(t1){ clearTimeout(t1); t1=null; }
-      if(t2){ clearInterval(t2); t2=null; }
-    };
-
-    btn.addEventListener('pointerdown', start);
-    window.addEventListener('pointerup', stop);
-    window.addEventListener('pointercancel', stop);
-    btn.addEventListener('mouseleave', stop);
-  }
-
   function populateWorkoutSelect(){
     const sel=el('workout-select'); if(!sel) return; sel.innerHTML='';
     const customs=loadCustomWorkouts();
@@ -825,27 +797,18 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
         }
       });
 
+      // Init status (frakoblet til å begynne med)
       setDeviceStatus('hr', false);
       setDeviceStatus('tm', false);
 
       el('connect-hr')?.addEventListener('click', connectHR);
       el('connect-treadmill')?.addEventListener('click', connectTreadmill);
 
-      // RPE
       el('rpe-dec')?.addEventListener('click', ()=> applyRPEChange(-0.5));
       el('rpe-inc')?.addEventListener('click', ()=> applyRPEChange(+0.5));
       el('rpe-now')?.addEventListener('change', ()=> applyRPEChange(0));
       setRPE(getNS('lastRPE', 0));
 
-      // Autorepeat på ±
-      addAutoRepeat('speed-inc', ()=> setSpeed(STATE.speedKmh + 0.1));
-      addAutoRepeat('speed-dec', ()=> setSpeed(STATE.speedKmh - 0.1));
-      addAutoRepeat('grade-inc', ()=> setGrade(STATE.gradePct + 0.5));
-      addAutoRepeat('grade-dec', ()=> setGrade(STATE.gradePct - 0.5));
-      addAutoRepeat('rpe-inc',   ()=> applyRPEChange(+0.5), 350, 120);
-      addAutoRepeat('rpe-dec',   ()=> applyRPEChange(-0.5), 350, 120);
-
-      // Manuelle kontroller + hurtigknapper
       for(const btn of document.querySelectorAll('.speed-btn'))
         btn.addEventListener('click', (ev)=> setSpeed(Number(ev.currentTarget.dataset.speed)) );
       el('manual-speed')?.addEventListener('change',()=> setSpeed(el('manual-speed').value));
@@ -857,12 +820,10 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
       for(const btn of document.querySelectorAll('.grade-btn'))
         btn.addEventListener('click', (ev)=> setGrade(Number(ev.currentTarget.dataset.grade||0)) );
 
-      // no-HR modal
       el('nohr-cancel')?.addEventListener('click', ()=> el('nohr-modal')?.classList.remove('open'));
       el('nohr-start') ?.addEventListener('click', ()=>{ el('nohr-modal')?.classList.remove('open'); startTicker(); });
       el('nohr-connect')?.addEventListener('click', async ()=>{ el('nohr-modal')?.classList.remove('open'); await connectHR(); });
 
-      // Hovedknapper
       el('btn-start-pause')?.addEventListener('click', async ()=>{
         if(!STATE.workout){
           const sel=el('workout-select'); const customs=loadCustomWorkouts();
@@ -875,6 +836,7 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
         if(!STATE.ticker){ if(STATE.hr==null) return ensureModalCompatOrStart(); startTicker(); }
         else { stopTicker(); }
       });
+
       el('btn-skip-fwd')?.addEventListener('click', ()=>{
         const w=STATE.workout; if(!w) return;
         if(w.phase==='warmup'){ w.tLeft=0; nextPhase(); }
@@ -900,11 +862,9 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
         }
       });
 
-      // Canvas/graf
       canvas=el('chart'); ctx=canvas?.getContext('2d'); dpr=window.devicePixelRatio||1;
       window.addEventListener('resize', resizeCanvas); resizeCanvas();
 
-      // Ghost-meny
       el('ghost-picker')?.addEventListener('click', (e)=>{
         e.stopPropagation(); el('ghost-menu')?.classList.remove('hidden'); buildGhostList();
       });
