@@ -1,6 +1,6 @@
-// INTZ v10.1 – Stabil + Ghost overlay + Øktstatus + statusknapper + autorepeat + større verdier
-// Build ID: 2026-03-06_quickkeys_repeat_v1
-console.info('[INTZ] main.js loaded: 2026-03-06_quickkeys_repeat_v1');
+// INTZ v10.1 – Stabil + Ghost overlay + Øktstatus + statusknapper + autorepeat + hurtigknapper
+// Build ID: 2026-03-06_quickkeys_repeat_v2
+console.info('[INTZ] main.js loaded: 2026-03-06_quickkeys_repeat_v2');
 
 function activeUser(){ return localStorage.getItem('active_user') || 'default'; }
 function nsKey(k){ return 'u:'+activeUser()+':'+k; }
@@ -110,8 +110,8 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
         const instSpeedKmh = dv.getUint16(i, true) / 100; i += 2;
         setSpeed(instSpeedKmh);
 
-        if (flags & (1 << 1)) i += 2;
-        if (flags & (1 << 2)) i += 3;
+        if (flags & (1 << 1)) i += 2; // avg speed
+        if (flags & (1 << 2)) i += 3; // total distance
         if (flags & (1 << 3)) {
           const incline01pct = dv.getInt16(i, true); i += 2;
           const rampAngle01d = dv.getInt16(i, true); i += 2;
@@ -624,14 +624,7 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
       if (ghostEnabled && STATE.ghost && STATE.ghost.avg && STATE.workout && STATE.workout.startedAt) {
         const g = STATE.ghost.avg;
         const startTs = new Date(STATE.workout.startedAt).getTime();
-        const gHR = [], g=o.series[0].workSec||0;        const gHR = [], gW = [];
-          if(o.tLeft===0){ o.phase='rest'; o.tLeft=o.series[0].restSec||0; }
-        } else { o.phase='cooldown'; o.tLeft=o.cooldownSec; }
-        return;
-      }
-      if(o.phase==='work'){
-        const s=o.series[o.sIdx];
-        if(o.rep < s.re
+        const gHR = [], gW = [];
         for (let t = xmin; t <= xmax; t += 1000) {
           const sec = Math.floor((t - startTs) / 1000);
           if (sec >= 0 && sec <= g.dur) {
@@ -710,3 +703,261 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
     function adv(o){
       if(o.phase==='warmup'){
         if(o.series && o.series.length){
+          o.phase='work'; o.sIdx=0; o.rep=1; o.tLeft=o.series[0].workSec||0;
+          if(o.tLeft===0){ o.phase='rest'; o.tLeft=o.series[0].restSec||0; }
+        } else { o.phase='cooldown'; o.tLeft=o.cooldownSec; }
+        return;
+      }
+      if(o.phase==='work'){
+        const s=o.series[o.sIdx];
+        if(o.rep < s.reps){ o.phase='rest'; o.tLeft=s.restSec||0; return; }
+        if(o.sIdx < o.series.length-1){
+          const sr=s.seriesRestSec||0; if(sr>0){ o.phase='seriesrest'; o.tLeft=sr; return; }
+          o.sIdx++; o.phase='work'; o.rep=1; o.tLeft=o.series[o.sIdx].workSec||0;
+          if(o.tLeft===0){ o.phase='rest'; o.tLeft=o.series[o.sIdx].restSec||0; }
+          return;
+        }
+        o.phase='cooldown'; o.tLeft=o.cooldownSec; return;
+      }
+      if(o.phase==='rest'){
+        const s=o.series[o.sIdx];
+        if(o.rep < s.reps){
+          o.rep++; o.phase='work'; o.tLeft=s.workSec||0;
+          if(o.tLeft===0){ o.phase='rest'; o.tLeft=s.restSec||0; }
+          return;
+        }
+        if(o.sIdx < o.series.length-1){
+          const sr=s.seriesRestSec||0; if(sr>0){ o.phase='seriesrest'; o.tLeft=sr; return; }
+          o.sIdx++; o.phase='work'; o.rep=1; o.tLeft=o.series[o.sIdx].workSec||0;
+          if(o.tLeft===0){ o.phase='rest'; o.tLeft=o.series[o.sIdx].restSec||0; }
+          return;
+        }
+        o.phase='cooldown'; o.tLeft=o.cooldownSec; return;
+      }
+      if(o.phase==='seriesrest'){
+        o.sIdx++; o.phase='work'; o.rep=1; o.tLeft=o.series[o.sIdx].workSec||0;
+        if(o.tLeft===0){ o.phase='rest'; o.tLeft=o.series[o.sIdx].restSec||0; }
+        return;
+      }
+      if(o.phase==='cooldown'){ o.phase='done'; o.tLeft=0; return; }
+    }
+    let remaining = Number(obj.tLeft||0);
+    let guard=0;
+    while(obj.phase!=='done' && guard++<10000){
+      adv(obj);
+      if(obj.phase==='done') break;
+      remaining += phaseDur(obj);
+    }
+    return Math.max(0, Math.round(remaining));
+  }
+
+  function avgOf(arr){ if(!arr.length) return null; return arr.reduce((a,b)=>a+b,0)/arr.length; }
+  function computeLastWorkMetrics(){
+    const pts = STATE.logger.points || [];
+    if(pts.length===0) return {speed:null, hr20:null};
+    let j=pts.length-1;
+    while(j>=0 && (pts[j].phase!=='work')) j--;
+    if(j<0) return {speed:null, hr20:null};
+    const rep = pts[j].rep||0;
+    let i=j; while(i>=0 && pts[i].phase==='work' && pts[i].rep===rep) i--; i++;
+    const seg = pts.slice(i, j+1);
+    const sp = seg.map(p=> (p.speed_ms||0)*3.6).filter(x=>isFinite(x));
+    const speed = sp.length? avgOf(sp): null;
+    const tEnd = pts[j].ts; const tMin = tEnd - 20000;
+    const hrw = seg.filter(p=> p.ts>=tMin).map(p=> p.hr||0).filter(x=>x>0);
+    const hr20 = hrw.length? Math.round(avgOf(hrw)) : null;
+    return {speed, hr20};
+  }
+  function updateStatusCard(){
+    const elp = document.getElementById('st-elapsed');
+    const rem = document.getElementById('st-remaining');
+    const dst = document.getElementById('st-dist');
+    const elv = document.getElementById('st-elev');
+    const tss = document.getElementById('st-tss');
+    const lst = document.getElementById('st-last');
+    if(!elp||!dst||!elv||!tss||!lst) return;
+
+    let elapsed = 0, remaining = 0;
+
+    if(STATE.workout){
+      if(STATE.workout.startedAt && STATE.ticker){
+        const now = Date.now();
+        const start = new Date(STATE.workout.startedAt).getTime() || now;
+        elapsed = Math.max(0, Math.round((now - start)/1000));
+      } else {
+        elapsed = 0;
+      }
+      remaining = computeRemainingSec(STATE.workout);
+    }
+
+    elp.textContent = fmtMMSS(elapsed);
+    rem.textContent = (remaining>0? fmtMMSS(remaining) : (STATE.workout? '00:00' : '--:--'));
+    dst.textContent = (STATE.logger.dist/1000).toFixed(2)+ ' km';
+    elv.textContent = Math.round(STATE.metrics.elevGainM) + ' m';
+    tss.textContent = Math.round(STATE.metrics.tss);
+
+    const m = computeLastWorkMetrics();
+    const spTxt = (m.speed!=null? m.speed.toFixed(1):'--') + ' km/t';
+    const hrTxt = (m.hr20!=null? m.hr20:'--') + ' bpm';
+    lst.textContent = spTxt + ' · ' + hrTxt;
+  }
+
+  function ensureModalCompatOrStart(){
+    const m=el('nohr-modal');
+    if(!m){
+      const want=confirm('Pulsbelte ikke tilkoblet. Koble til nå?');
+      if(want) return connectHR(); else return startTicker();
+    }
+    m.classList.add('open');
+  }
+
+  function init(){
+    try{
+      for(const a of (document.getElementById('topbar')?.querySelectorAll('a')||[]))
+        a.addEventListener('click', (e)=>{
+          if(STATE.workout && STATE.ticker && STATE.workout.phase!=='done'){
+            e.preventDefault(); alert('Avslutt økta før du navigerer bort fra hovedsida.');
+          }
+        });
+      window.addEventListener('beforeunload', (e)=>{
+        if(STATE.workout && STATE.ticker && STATE.workout.phase!=='done'){
+          e.preventDefault(); e.returnValue='Økta pågår. Avslutt før du lukker/navigerer bort.';
+        }
+      });
+
+      setDeviceStatus('hr', false);
+      setDeviceStatus('tm', false);
+
+      el('connect-hr')?.addEventListener('click', connectHR);
+      el('connect-treadmill')?.addEventListener('click', connectTreadmill);
+
+      // RPE
+      el('rpe-dec')?.addEventListener('click', ()=> applyRPEChange(-0.5));
+      el('rpe-inc')?.addEventListener('click', ()=> applyRPEChange(+0.5));
+      el('rpe-now')?.addEventListener('change', ()=> applyRPEChange(0));
+      setRPE(getNS('lastRPE', 0));
+
+      // Autorepeat på ±
+      addAutoRepeat('speed-inc', ()=> setSpeed(STATE.speedKmh + 0.1));
+      addAutoRepeat('speed-dec', ()=> setSpeed(STATE.speedKmh - 0.1));
+      addAutoRepeat('grade-inc', ()=> setGrade(STATE.gradePct + 0.5));
+      addAutoRepeat('grade-dec', ()=> setGrade(STATE.gradePct - 0.5));
+      addAutoRepeat('rpe-inc',   ()=> applyRPEChange(+0.5), 350, 120);
+      addAutoRepeat('rpe-dec',   ()=> applyRPEChange(-0.5), 350, 120);
+
+      // Manuelle kontroller + hurtigknapper
+      for(const btn of document.querySelectorAll('.speed-btn'))
+        btn.addEventListener('click', (ev)=> setSpeed(Number(ev.currentTarget.dataset.speed)) );
+      el('manual-speed')?.addEventListener('change',()=> setSpeed(el('manual-speed').value));
+      el('manual-grade')?.addEventListener('change',()=> setGrade(el('manual-grade').value));
+      el('speed-dec')?.addEventListener('click', ()=> setSpeed(STATE.speedKmh-0.1));
+      el('speed-inc')?.addEventListener('click', ()=> setSpeed(STATE.speedKmh+0.1));
+      el('grade-dec')?.addEventListener('click', ()=> setGrade(STATE.gradePct-0.5));
+      el('grade-inc')?.addEventListener('click', ()=> setGrade(STATE.gradePct+0.5));
+      for(const btn of document.querySelectorAll('.grade-btn'))
+        btn.addEventListener('click', (ev)=> setGrade(Number(ev.currentTarget.dataset.grade||0)) );
+
+      // no-HR modal
+      el('nohr-cancel')?.addEventListener('click', ()=> el('nohr-modal')?.classList.remove('open'));
+      el('nohr-start') ?.addEventListener('click', ()=>{ el('nohr-modal')?.classList.remove('open'); startTicker(); });
+      el('nohr-connect')?.addEventListener('click', async ()=>{ el('nohr-modal')?.classList.remove('open'); await connectHR(); });
+
+      // Hovedknapper
+      el('btn-start-pause')?.addEventListener('click', async ()=>{
+        if(!STATE.workout){
+          const sel=el('workout-select'); const customs=loadCustomWorkouts();
+          if(sel && sel.value && sel.value.startsWith('c:')){
+            const idx=Number(sel.value.split(':')[1]); const cw=customs[idx];
+            if(cw){ STATE.workout=workoutFromCfg(cw); STATE.totalSec = computeTotalDur(cw); }
+            else { return alert('Velg en økt.'); }
+          } else { return alert('Velg en økt.'); }
+        }
+        if(!STATE.ticker){ if(STATE.hr==null) return ensureModalCompatOrStart(); startTicker(); }
+        else { stopTicker(); }
+      });
+      el('btn-skip-fwd')?.addEventListener('click', ()=>{
+        const w=STATE.workout; if(!w) return;
+        if(w.phase==='warmup'){ w.tLeft=0; nextPhase(); }
+        else if(w.phase==='cooldown'){
+          w.phase='done'; w.endedAt=new Date().toISOString();
+          writeSample(Date.now()); stopLogger(); finishSession();
+        } else { nextPhase(); }
+        updateWorkoutUI();
+      });
+      el('btn-skip-back')?.addEventListener('click', ()=> prevPhase());
+      el('btn-stop-save')?.addEventListener('click', ()=>{
+        if(!STATE.workout) return;
+        if(confirm('Stopp og lagre økta?')){
+          STATE.workout.endedAt=new Date().toISOString();
+          writeSample(Date.now()); stopLogger(); finishSession();
+        }
+      });
+      el('btn-discard')?.addEventListener('click', ()=>{
+        if(confirm('Forkast økta (ikke lagre)?')){
+          if(STATE.ticker) { clearInterval(STATE.ticker); STATE.ticker=null; }
+          STATE.workout=null; STATE.logger.active=false; STATE.logger.points=[];
+          updateWorkoutUI(); draw();
+        }
+      });
+
+      // Canvas/graf
+      canvas=el('chart'); ctx=canvas?.getContext('2d'); dpr=window.devicePixelRatio||1;
+      window.addEventListener('resize', resizeCanvas); resizeCanvas();
+
+      // Ghost-meny
+      el('ghost-picker')?.addEventListener('click', (e)=>{
+        e.stopPropagation(); el('ghost-menu')?.classList.remove('hidden'); buildGhostList();
+      });
+      document.addEventListener('click', (e)=>{
+        const menu=el('ghost-menu'); const picker=el('ghost-picker');
+        if(menu && !menu.classList.contains('hidden') && !menu.contains(e.target) && e.target!==picker)
+          menu.classList.add('hidden');
+      });
+      el('ghost-select-all')?.addEventListener('click', (e)=>{
+        e.preventDefault(); el('ghost-list')?.querySelectorAll('input[type=checkbox]')?.forEach(c=>c.checked=true);
+      });
+      el('ghost-clear-all')?.addEventListener('click', (e)=>{
+        e.preventDefault(); el('ghost-list')?.querySelectorAll('input[type=checkbox]')?.forEach(c=>c.checked=false);
+      });
+      el('ghost-apply')?.addEventListener('click', ()=>{
+        const checks=el('ghost-list')?.querySelectorAll('input[type=checkbox]');
+        STATE.ghost.ids=new Set(Array.from(checks||[]).filter(c=>c.checked).map(c=>c.value));
+        computeGhostAverage();
+        el('ghost-menu')?.classList.add('hidden');
+        draw(); // vis ghost umiddelbart
+      });
+
+      populateWorkoutSelect();
+      preselectIfRequested();
+      ensureDefaultSelected();
+
+      setInterval(()=>{
+        try{
+          const t=Date.now();
+          if(STATE.hr!=null) STATE.series.hr.push({t,y:STATE.hr});
+          const dispSpeed=displaySpeedKmh();
+          STATE.series.speed.push({t,y:dispSpeed});
+          const w=estimateWattExternal(dispSpeed, STATE.gradePct, STATE.massKg, STATE.cal.Crun, STATE.cal.K);
+          STATE.series.watt.push({t,y:w});
+          STATE.series.rpe.push({t,y:STATE.rpe});
+
+          const cutoff=t-STATE.windowSec*1000;
+          for(const k of ['hr','speed','watt','rpe']){
+            const arr=STATE.series[k]; while(arr.length && arr[0].t<cutoff) arr.shift();
+          }
+
+          el('pulse') && (el('pulse').textContent = (STATE.hr!=null?STATE.hr:'--'));
+          el('watt')  && (el('watt').textContent = w||'--');
+
+          draw();
+          if(STATE.logger.active){ writeSample(t); }
+          updateStatusCard();
+        }catch(e){ showErr(e); }
+      },1000);
+
+      requestWakeLock();
+    }catch(e){ showErr(e); }
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+})();
