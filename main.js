@@ -1,3 +1,4 @@
+import { uploadSessionJSON } from './cloud-sessions.js';
 // INTZ v10.1 – Stabil hovedlogikk + Ghost overlay + Øktstatus-forbedringer + status i toppknapper
 // Build ID: 2026-03-06_ui-maxkeys_v1
 console.info('[INTZ] main.js loaded: 2026-03-06_ui-maxkeys_v1');
@@ -355,7 +356,8 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
  points:STATE.logger.points
  };
  const arr=getNS('sessions',[]); arr.push(session); setNS('sessions', arr);
- window.location.assign('results.html#'+session.id);
+ await uploadSessionJSON(session);
+ window.location.assign('results.html#cloud:'+encodeURIComponent('uploaded-latest'));
  }catch(e){ console.error('finishSession failed', e); alert('Klarte ikke å lagre økt: '+e.message); }
  }
  function stepDurationLabel(w){
