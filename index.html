@@ -9,6 +9,10 @@
  <link rel="stylesheet" href="style.css" />
  <!-- Phosphor Icons -->
  <script src="https://unpkg.com/phosphor-icons@1.4.2"></script>
+
+<script type="module" src="supabase-init.js"></script>
+<script type="module" src="cloud-sync.js"></script>
+<script type="module" src="cloud-sessions.js"></script>
 </head>
 <body>
  <header class="topbar" id="topbar">
@@ -19,7 +23,11 @@
  <a href="log.html">Logg</a>
  <a href="settings.html">Innstillinger</a>
  <a href="help.html">Hjelp</a>
- </div>
+ 
+<span id="cloud-status" class="badge">Sky: offline</span>
+<button id="cloud-sync" class="ghost" title="Synkroniser nå">Synk</button>
+<button id="cloud-auth" class="secondary" title="Logg inn">Logg inn</button>
+</div>
  <!-- Enhetsknapper med tilkoblingsstatus -->
  <div class="devicectl">
  <button id="connect-hr" class="btn-device disconnected" title="Koble til puls">

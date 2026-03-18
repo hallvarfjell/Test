@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html lang="no">
 <head>
 <meta charset="utf-8"/>
@@ -8,6 +7,9 @@
 <title>Resultat – Intervall PWA</title>
 <link href="style.css" rel="stylesheet"/>
 <script src="https://unpkg.com/phosphor-icons@1.4.2"></script>
+
+<script type="module" src="supabase-init.js"></script>
+<script type="module" src="cloud-sessions.js"></script>
 </head>
 <body>
 <header class="topbar">
@@ -18,6 +20,10 @@
 <a href="log.html">Logg</a>
 <a href="settings.html">Innstillinger</a>
 <a href="help.html">Hjelp</a>
+
+<span id="cloud-status" class="badge">Sky: offline</span>
+<button id="cloud-sync" class="ghost" title="Synkroniser nå">Synk</button>
+<button id="cloud-auth" class="secondary" title="Logg inn">Logg inn</button>
 </div>
 </header>
 <main class="layout">
@@ -32,10 +38,10 @@
 </div>
 <div class="card">
 <h3>Vis metrikker</h3>
-<label><input checked="" id="r-show-hr" type="checkbox"/> Puls (rød)</label>
-<label><input checked="" id="r-show-watt" type="checkbox"/> Watt (grønn)</label>
+<label><input checked id="r-show-hr" type="checkbox"/> Puls (rød)</label>
+<label><input checked id="r-show-watt" type="checkbox"/> Watt (grønn)</label>
 <label><input id="r-show-speed" type="checkbox"/> Fart (blå)</label>
-<label><input checked="" id="r-show-rpe" type="checkbox"/> RPE (gul)</label>
+<label><input checked id="r-show-rpe" type="checkbox"/> RPE (gul)</label>
 </div>
 <div class="card">
 <h3>Merknader</h3>
@@ -72,6 +78,6 @@
 </div>
 </section>
 </main>
-<script defer="" src="results.js"></script>
+<script defer src="results.js"></script>
 </body>
 </html>

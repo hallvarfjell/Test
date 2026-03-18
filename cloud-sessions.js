@@ -1,72 +1,14 @@
-// cloud-sessions.js — authentication + cloud storage for INTZ sessions
-// Requires: supabase-client.js
-import { supabase } from './supabase-client.js';
-
-const BUCKET = 'intz-workouts';
-
-export async function signInEmail(email, password){
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  if(error) throw error;
-  return data.user;
-}
-
-export async function signUpEmail(email, password){
-  const { data, error } = await supabase.auth.signUp({ email, password });
-  if(error) throw error;
-  return data.user;
-}
-
-export async function signOut(){
-  await supabase.auth.signOut();
-}
-
-export async function getCurrentUser(){
-  const { data: { user } } = await supabase.auth.getUser();
-  return user;
-}
-
-export function filenameFor(now=new Date()){
-  const ts = now.toISOString().replace(/[:.]/g,'-');
-  return `session_${ts}.json`;
-}
-
-function withUserPrefix(user_id, name){
-  return `${user_id}/${name}`;
-}
-
-export async function uploadSessionJSON(sessionObj, name=filenameFor()){
-  const { data: userData } = await supabase.auth.getUser();
-  const user_id = userData?.user?.id;
-  if(!user_id) throw new Error('Ikke innlogget');
-  const path = withUserPrefix(user_id, name);
-  const blob = new Blob([JSON.stringify(sessionObj)], { type: 'application/json' });
-  const { data, error } = await supabase.storage.from(BUCKET).upload(path, blob, { upsert:false, contentType:'application/json' });
-  if(error) throw error;
-  // prøv å legge inn metadata i DB (valgfritt)
-  try { await supabase.from('sessions').insert({ user_id, filename: path }); } catch(_) {}
-  return data;
-}
-
-export async function listSessionsMeta(){
-  // Foretrekker DB-tabell hvis den finnes; ellers hent fra storage med user-prefix
-  const { data: userData } = await supabase.auth.getUser();
-  const user_id = userData?.user?.id;
-  if(!user_id) throw new Error('Ikke innlogget');
-  try{
-    const { data, error } = await supabase.from('sessions').select('*').eq('user_id', user_id).order('created_at', { ascending:false });
-    if(error) throw error;
-    return data.map(r=>({ id:r.id, filename:r.filename, created_at:r.created_at }));
-  }catch(e){
-    // Fallback: list objects in bucket under user_id prefix
-    const { data, error } = await supabase.storage.from(BUCKET).list(user_id, { limit:1000, sortBy:{ column:'created_at', order:'desc' }});
-    if(error) throw error;
-    return (data||[]).map(o=>({ id:o.id||o.name, filename: withUserPrefix(user_id, o.name), created_at:o.created_at||null }));
-  }
-}
-
-export async function downloadSession(filename){
-  const { data, error } = await supabase.storage.from(BUCKET).download(filename);
-  if(error) throw error;
-  const txt = await data.text();
-  return JSON.parse(txt);
-}
+import { supabase } from './supabase-init.js';
+import { sessionToTCX } from './tcx.js';
+const statusEl = document.getElementById('cloud-status');
+const syncBtn  = document.getElementById('cloud-sync');
+const authBtn  = document.getElementById('cloud-auth');
+function setStatus(text, ok=false){ if(!statusEl) return; statusEl.textContent = `Sky: ${text}`; statusEl.style.border = ok? '1px solid #16a34a' : '1px solid #dc2626'; }
+async function getSession(){ const { data:{ session } } = await supabase.auth.getSession(); return session; }
+async function bootstrap(){ const sess = await getSession(); setStatus(sess? 'online':'offline', !!sess); supabase.auth.onAuthStateChange((_e,s)=> setStatus(s? 'online':'offline', !!s)); }
+async function pullSessions(){ const sess = await getSession(); if(!sess){ setStatus('offline'); return; } setStatus('henter…'); const { data, error } = await supabase.from('workouts').select('client_id, name, started_at, reps, lt1, lt2, mass_kg').order('started_at',{ascending:false}); if(error){ console.warn(error); setStatus('feil'); return; } const local = JSON.parse(localStorage.getItem('sessions') || '[]'); const byId = new Map(local.map(x=>[x.id, x])); (data||[]).forEach(row=>{ if(!byId.has(row.client_id)){ byId.set(row.client_id, { id: row.client_id, name: row.name || 'Økt', startedAt: row.started_at, endedAt: row.started_at, reps: row.reps || 0, lt1: row.lt1 ?? null, lt2: row.lt2 ?? null, massKg: row.mass_kg ?? null, points: [] }); }}); localStorage.setItem('sessions', JSON.stringify(Array.from(byId.values()))); setStatus('online', true); window.dispatchEvent(new CustomEvent('cloud-synced')); }
+async function pushNewSession(session){ const sess = await getSession(); if(!sess) return; setStatus('laster opp…'); const user_id = sess.user.id; const tcx = sessionToTCX(session); const tcxBlob = new Blob([tcx], { type: 'application/vnd.garmin.tcx+xml' }); const tcxPath = `${user_id}/${session.id}.tcx`; const { error: upErr } = await supabase.storage.from('sessions').upload(tcxPath, tcxBlob, { upsert:true }); if(upErr){ console.warn(upErr); setStatus('feil'); return; } const pts = Array.isArray(session.points)? session.points: []; const payload = { user_id, client_id: session.id, name: session.name || 'Økt', started_at: session.startedAt, ended_at: session.endedAt, duration_sec: Math.max(1, Math.round((new Date(session.endedAt).getTime() - new Date(session.startedAt).getTime())/1000)), reps: Number(session.reps || 0), lt1: Number(session.lt1 || null), lt2: Number(session.lt2 || null), mass_kg: Number(session.massKg || null), distance_m: Number(pts.at(-1)?.dist_m ?? 0), elev_gain_m: Number(session.metrics?.elevGainM ?? 0), tss: Number(session.metrics?.tss ?? 0), tcx_path: `sessions/${tcxPath}` }; const { error: upsertErr } = await supabase.from('workouts').upsert(payload, { onConflict: 'user_id,client_id' }); if(upsertErr){ console.warn(upsertErr); setStatus('feil'); return; } setStatus('online', true); }
+async function deleteSession(client_id){ const sess = await getSession(); if(!sess) return; const user_id = sess.user.id; const { data } = await supabase.from('workouts').select('tcx_path').eq('user_id', user_id).eq('client_id', client_id).maybeSingle(); await supabase.from('workouts').delete().match({ user_id, client_id }); const path = data?.tcx_path?.replace('sessions/', '') || `${user_id}/${client_id}.tcx`; await supabase.storage.from('sessions').remove([path]).catch(()=>{}); }
+if (authBtn) authBtn.onclick = async ()=>{ const email=prompt('E-post (magic link):'); if(!email) return; const { error } = await supabase.auth.signInWithOtp({ email }); if(error) alert(error.message); else alert('Sjekk e-posten og følg lenken.'); };
+if (syncBtn) syncBtn.onclick = async ()=>{ await pullSessions().catch(console.warn); window.dispatchEvent(new CustomEvent('cloud-synced')); };
+window.cloudSessions = { bootstrap, pullSessions, pushNewSession, deleteSession };
