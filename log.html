@@ -3,73 +3,88 @@
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0, user-scalable=no" name="viewport"/>
-<title>Øktlogg – Intervall PWA</title>
+<title>Øktlogg – INTZ</title>
 <link href="style.css" rel="stylesheet"/>
 <script src="https://unpkg.com/phosphor-icons@1.4.2"></script>
 
+<!-- SKY-moduler (må lastes for synk på loggsiden) -->
 <script type="module" src="supabase-init.js"></script>
 <script type="module" src="cloud-sync.js"></script>
 <script type="module" src="cloud-sessions.js"></script>
 <script type="module" src="ui-status.js"></script>
-
 </head>
 <body>
 <header class="topbar">
-<div class="nav">
-<span><strong>INTZ</strong></span>
-<a href="index.html">Hovedside</a>
-<a href="builder.html">Øktbygger</a>
-<a href="log.html">Logg</a>
-<a href="settings.html">Innstillinger</a>
-<a href="help.html">Hjelp</a>
-
-</div>
+  <div class="nav">
+    <span><strong>INTZ</strong></span>
+    <a href="index.html">Hovedside</a>
+    <a href="builder.html">Øktbygger</a>
+    <a href="log.html">Logg</a>
+    <a href="settings.html">Innstillinger</a>
+    <a href="help.html">Hjelp</a>
+  </div>
 </header>
 <main class="layout">
-<section class="leftcol">
-<div class="card">
-<h3>Økter</h3>
-<div id="log-list"></div>
-</div>
-</section>
+  <section class="leftcol">
+    <div class="card">
+      <h3>Økter</h3>
+      <div id="log-list"></div>
+    </div>
+  </section>
 </main>
 <script>
+// ====== Felles helpers (samme som før) ======
 function activeUser(){ return localStorage.getItem('active_user') || 'default'; }
 function nsKey(k){ return 'u:'+activeUser()+':'+k; }
 function getNS(k, d){ try{ const v=localStorage.getItem(nsKey(k)); if(v!=null) return JSON.parse(v); const ov=localStorage.getItem(k); return ov!=null? JSON.parse(ov): d; }catch(e){ return d; } }
+
 (function(){
- function render(){
- const list=document.getElementById('log-list'); list.innerHTML='';
- const sessions=getNS('sessions',[]);
- if(!sessions.length){ list.innerHTML='<p class="small">Ingen økter enda.</p>'; return; }
- const ul=document.createElement('div'); ul.style.display='grid'; ul.style.gap='8px';
- sessions.slice().reverse().forEach(s=>{
- const row=document.createElement('div'); row.className='menu-item'; row.style.justifyContent='space-between'; row.style.alignItems='center'; row.style.display='flex';
- const when=new Date(s.startedAt||Date.now()).toLocaleString();
- const dist=s.points&&s.points.length? (s.points[s.points.length-1].dist_m/1000).toFixed(2)+' km' : '';
- const left=document.createElement('a'); left.href='results.html#'+s.id; left.textContent=`${s.name||'Økt'} — ${when}`; left.style.flex='1'; left.style.textDecoration='none';
- const right=document.createElement('div'); right.style.display='flex'; right.style.gap='8px'; right.style.alignItems='center';
- const distSpan=document.createElement('span'); distSpan.textContent=dist; right.appendChild(distSpan);
- const del=document.createElement('button'); del.className='ghost'; del.title='Slett'; del.innerHTML='<i class="ph-trash"></i>';
+  const list = document.getElementById('log-list');
 
-- del.onclick=()=>{
-+ del.onclick=async()=>{
-    if(confirm('Slette denne økta?')){
-      const arr=getNS('sessions',[]);
-      const idx=arr.findIndex(x=>x.id===s.id);
-      if(idx>=0){ arr.splice(idx,1); localStorage.setItem(nsKey('sessions'), JSON.stringify(arr));
-+       try { await window.cloudSessions?.deleteSession?.(s.id); } catch(e) { console.warn(e); }
-        render();
-      }
-    }
-  };
+  function fmtWhen(s){ try{ return new Date(s||Date.now()).toLocaleString(); }catch(_){ return ''; } }
 
- right.appendChild(del);
- row.appendChild(left); row.appendChild(right); ul.appendChild(row);
- });
- list.appendChild(ul);
- }
- render();
+  function render(){
+    list.innerHTML='';
+    const sessions = getNS('sessions', []);
+    if(!sessions.length){ list.innerHTML='<p class="small">Ingen økter enda.</p>'; return; }
+    const wrap = document.createElement('div'); wrap.style.display='grid'; wrap.style.gap='8px';
+    sessions.slice().reverse().forEach(s=>{
+      const row=document.createElement('div'); row.className='menu-item'; row.style.display='flex'; row.style.justifyContent='space-between'; row.style.alignItems='center';
+      const left=document.createElement('a'); left.href='results.html#'+s.id; left.textContent=(s.name||'Økt')+' — '+fmtWhen(s.startedAt); left.style.flex='1'; left.style.textDecoration='none';
+      const right=document.createElement('div'); right.style.display='flex'; right.style.gap='8px'; right.style.alignItems='center';
+      const dist=document.createElement('span');
+      const km = (s.points && s.points.length)? (s.points[s.points.length-1].dist_m/1000):0;
+      dist.textContent = isFinite(km)? km.toFixed(2)+' km' : '';
+      const del=document.createElement('button'); del.className='ghost'; del.title='Slett'; del.innerHTML='<i class="ph-trash"></i>';
+      // ===== SKY-slett (micropatch) =====
+      del.onclick = async ()=>{
+        if(!confirm('Slette denne økta?')) return;
+        const arr = getNS('sessions', []);
+        const idx = arr.findIndex(x=>x.id===s.id);
+        if(idx>=0){
+          // 1) Lokal slett – skriv til både nsKey og global (for robusthet)
+          arr.splice(idx,1);
+          const json = JSON.stringify(arr);
+          localStorage.setItem(nsKey('sessions'), json);
+          localStorage.setItem('sessions', json);
+          // 2) Sky-slett (best effort)
+          try{ await window.cloudSessions?.deleteSession?.(s.id); }catch(e){ console.warn('[sky-slett] feilet:', e); }
+          // 3) Re-render
+          render();
+        }
+      };
+      right.appendChild(dist); right.appendChild(del);
+      row.appendChild(left); row.appendChild(right);
+      wrap.appendChild(row);
+    });
+    list.appendChild(wrap);
+  }
+
+  // Første render
+  render();
+
+  // Oppdater når skyen har gjort en pull
+  window.addEventListener('cloud-synced', render);
 })();
 </script>
 </body>
