@@ -1,4 +1,4 @@
-// cloud-sessions.js – L3 FIX: eksporter deleteSession + (u:<bruker>:sessions) støtte
+// cloud-sessions.js – L4: deleteSession returns status + console logging
 import { supabase } from './supabase-init.js';
 import { sessionToTCX } from './tcx.js';
 
@@ -50,8 +50,15 @@ async function pushOne(entry){
 function isSessionsKey(k){ return k==='sessions' || k.endsWith(':sessions'); }
 
 (function(){
-  const _setItem=localStorage.setItem.bind(localStorage);
-  localStorage.setItem=function(k,v){ _setItem(k,v); if(isSessionsKey(k)){ enqueueFromValue(v); processQueue(); } };
+  if(!window.__INTZ_setItemWatchers){
+    const watchers = [];
+    const orig = localStorage.setItem.bind(localStorage);
+    localStorage.setItem = function(k, v){ orig(k,v); watchers.forEach(fn=>{ try{ fn(k,v); }catch(_){}}); };
+    window.__INTZ_setItemWatchers = watchers;
+  }
+  const watchers = window.__INTZ_setItemWatchers;
+  const watcher = (k,v)=>{ if(isSessionsKey(k)) { enqueueFromValue(v); processQueue(); } };
+  if(!watchers.includes(watcher)) watchers.push(watcher);
 })();
 
 function enqueueFromValue(v){ let arr=[]; try{ arr=JSON.parse(v||'[]'); }catch(_){ arr=[]; } const q=loadQ(); const known=new Set(q.map(x=>x.id)); arr.forEach(s=>{ if(!s||!s.id||!s.startedAt) return; if(!known.has(s.id)) q.push(s); }); saveQ(q); }
@@ -60,15 +67,20 @@ function scanAllKeys(){ const q0=loadQ(); let qset=new Set(q0.map(x=>x.id)); for
 async function processQueue(){ let q=loadQ(); if(!q.length) return; for(const entry of q){ try{ await pushOne(entry); q=q.filter(x=>x.id!==entry.id); saveQ(q);}catch(e){ oops(e); return; } } }
 
 export async function deleteSession(client_id){
-  const sess=await getSession(); if(!sess) return; const user_id=sess.user.id;
-  // Finn ev. lagret sti i DB
-  const { data } = await supabase.from('workouts').select('tcx_path').eq('user_id', user_id).eq('client_id', client_id).maybeSingle();
-  // Slett DB-rad
-  await supabase.from('workouts').delete().match({ user_id, client_id });
-  // Slett TCX i storage (best effort)
-  const rel = (data?.tcx_path||'').replace(/^sessions\//,'');
-  const path = rel || `${user_id}/${client_id}.tcx`;
-  try{ await supabase.storage.from('sessions').remove([path]); }catch(_){}
+  const sess=await getSession(); if(!sess){ oops(new Error('Ingen session for delete')); return { ok:false, reason:'no-session' }; }
+  const user_id=sess.user.id;
+  try{
+    const { data, error:selErr } = await supabase
+      .from('workouts').select('tcx_path').eq('user_id', user_id).eq('client_id', client_id).maybeSingle();
+    if(selErr) throw selErr;
+    const { error:delErr } = await supabase.from('workouts').delete().match({ user_id, client_id });
+    if(delErr) throw delErr;
+    const rel = (data?.tcx_path||'').replace(/^sessions\//,'');
+    const path = rel || `${user_id}/${client_id}.tcx`;
+    const { error:remErr } = await supabase.storage.from('sessions').remove([path]);
+    if(remErr) console.warn('[sessions] storage remove error', remErr);
+    return { ok:true };
+  }catch(e){ oops(e); return { ok:false, reason:e?.message||'unknown' } }
 }
 
 export async function bootstrap(){ scanAllKeys(); processQueue(); return true; }

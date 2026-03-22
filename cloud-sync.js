@@ -1,4 +1,4 @@
-// cloud-sync.js – L3 FIX: stopp duplisering (guard ved pull) + trygg delete eq(user_id)
+// cloud-sync.js – L4: dedupe via UPSERT on (user_id, sort_index) + strong guards
 import { supabase } from './supabase-init.js';
 const KEY = 'custom_workouts_v2';
 const GH_REDIRECT = 'https://hallvarfjell.github.io/Test/';
@@ -7,7 +7,15 @@ function activeUser(){ return localStorage.getItem('active_user') || 'default'; 
 function nsKey(k){ return 'u:'+activeUser()+':'+k; }
 function parse(json, d){ try{ return JSON.parse(json); }catch(_){ return d; } }
 
-let __INTZ_APPLYING_REMOTE__ = false; // guard for setItem-hook under pull
+let __INTZ_APPLYING_REMOTE__ = false; // don't echo pull->push
+let __INTZ_PUSH_INFLIGHT__ = false;    // prevent concurrent pushes
+let __INTZ_LAST_HASH__ = null;         // avoid pushing identical content
+
+function stableHash(str){
+  let h=0, i=0, len=str.length; if(len===0) return '0';
+  for(i=0;i<len;i++){ h = ((h<<5)-h) + str.charCodeAt(i); h |= 0; }
+  return String(h);
+}
 
 function getLocalTemplates(){
   const ns = localStorage.getItem(nsKey(KEY));
@@ -20,8 +28,8 @@ function setLocalTemplates(arr){
   const v = JSON.stringify(arr);
   __INTZ_APPLYING_REMOTE__ = true;
   try{
-    localStorage.setItem(KEY, v);           // global (bakoverkomp)
-    localStorage.setItem(nsKey(KEY), v);    // namespaced (INTZ)
+    localStorage.setItem(KEY, v);
+    localStorage.setItem(nsKey(KEY), v);
   } finally { __INTZ_APPLYING_REMOTE__ = false; }
 }
 
@@ -51,25 +59,38 @@ export async function pullTemplates(){
 }
 
 export async function pushTemplates(){
-  const sess = await getSession(); if(!sess) return; busy();
+  if(__INTZ_APPLYING_REMOTE__) return;        // don't push during pull
+  if(__INTZ_PUSH_INFLIGHT__) return;          // drop concurrent pushes
+
+  const sess = await getSession(); if(!sess) return;
   const user_id = sess.user.id;
   const arr = getLocalTemplates();
-  // Slett KUN mine rader; avbryt ved feil
-  const del = await supabase.from('workout_templates').delete().eq('user_id', user_id);
-  if(del.error){ oops(del.error); idle(); return; }
-  // Sett inn nåværende liste
   const payload = arr.map((w,i)=>({
     user_id,
+    sort_index: i,
     name: w.name ?? 'Økt',
     description: w.desc ?? w.description ?? '',
     warmup_sec: w.warmupSec ?? 0,
     cooldown_sec: w.cooldownSec ?? 0,
-    series: w.series ?? [],
-    sort_index: i
+    series: w.series ?? []
   }));
-  const ins = await supabase.from('workout_templates').insert(payload);
-  if(ins.error){ oops(ins.error); idle(); return; }
-  idle();
+
+  const json = JSON.stringify(payload);
+  const h = stableHash(json);
+  if(h === __INTZ_LAST_HASH__) return; // identical content
+
+  __INTZ_PUSH_INFLIGHT__ = true; busy();
+  try{
+    // Upsert per rad med konflikt på (user_id, sort_index)
+    // Forutsetter unik indeks i DB (se PATCH_NOTES_L4.sql)
+    const { error } = await supabase
+      .from('workout_templates')
+      .upsert(payload, { onConflict: 'user_id,sort_index' });
+    if(error){ oops(error); return; }
+    __INTZ_LAST_HASH__ = h;
+  } finally {
+    __INTZ_PUSH_INFLIGHT__ = false; idle();
+  }
 }
 
 export async function signIn(){
@@ -83,18 +104,24 @@ export async function bootstrap(){
   return !!session;
 }
 
-// --- hooks: fang både global KEY og nsKey(KEY); ignorer mens pull pågår ---
+// --- single setItem watcher registry to avoid wrappers clobbering each other ---
 (function(){
-  const _setItem = localStorage.setItem.bind(localStorage);
-  let timer=null;
-  function maybePush(k){
-    if(__INTZ_APPLYING_REMOTE__) return; // <- viktig guard mot ping-pong
-    if(k===KEY || k.endsWith(':'+KEY)){
-      if(timer) clearTimeout(timer);
-      timer = setTimeout(()=>{ pushTemplates().catch(oops); }, 800);
-    }
+  if(!window.__INTZ_setItemWatchers){
+    const watchers = [];
+    const orig = localStorage.setItem.bind(localStorage);
+    localStorage.setItem = function(k, v){ orig(k,v); watchers.forEach(fn=>{ try{ fn(k,v); }catch(_){}}); };
+    window.__INTZ_setItemWatchers = watchers;
   }
-  localStorage.setItem = function(k, v){ _setItem(k, v); maybePush(k); };
+  const watchers = window.__INTZ_setItemWatchers;
+  const watcher = (k)=>{
+    if(__INTZ_APPLYING_REMOTE__) return;
+    if(k===KEY || k.endsWith(':'+KEY)){
+      // small debounce via microtask
+      Promise.resolve().then(()=> pushTemplates().catch(oops));
+    }
+  };
+  // avoid duplicate registration
+  if(!watchers.includes(watcher)) watchers.push(watcher);
 })();
 
 window.cloudSync = { bootstrap, pullTemplates, pushTemplates, signIn };
