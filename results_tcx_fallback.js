@@ -1,4 +1,4 @@
-// results_tcx_fallback.js – henter signert URL fra Supabase Storage og laster ned TCX
+// results_tcx_fallback.js – signert URL nedlasting fra Supabase Storage
 import { supabase } from './supabase-init.js';
 
 async function downloadTCXFromCloud(client_id){
@@ -13,5 +13,4 @@ async function downloadTCXFromCloud(client_id){
   }catch(e){ console.warn(e); alert('Kunne ikke hente TCX fra sky: '+(e.message||e)); }
 }
 
-// Eksponer på window slik at ikke-module results.js kan bruke funksjonen
 window.downloadTCXFromCloud = downloadTCXFromCloud;
