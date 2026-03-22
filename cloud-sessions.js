@@ -1,4 +1,4 @@
-// cloud-sessions.js – L3: namespaced support + robust queue + scan
+// cloud-sessions.js – L3 FIX: eksporter deleteSession + (u:<bruker>:sessions) støtte
 import { supabase } from './supabase-init.js';
 import { sessionToTCX } from './tcx.js';
 
@@ -15,7 +15,7 @@ export async function pullSessions(){
   const sess=await getSession(); if(!sess) return; busy();
   const { data, error } = await supabase
     .from('workouts')
-    .select('client_id,name,started_at,reps,lt1,lt2,mass_kg')
+    .select('client_id,name,started_at,reps,lt1,lt2,mass_kg,tcx_path')
     .order('started_at',{ascending:false});
   if(error){ oops(error); return; }
   const local = JSON.parse(localStorage.getItem(nsKey('sessions'))||localStorage.getItem('sessions')||'[]');
@@ -59,7 +59,19 @@ function scanAllKeys(){ const q0=loadQ(); let qset=new Set(q0.map(x=>x.id)); for
 
 async function processQueue(){ let q=loadQ(); if(!q.length) return; for(const entry of q){ try{ await pushOne(entry); q=q.filter(x=>x.id!==entry.id); saveQ(q);}catch(e){ oops(e); return; } } }
 
+export async function deleteSession(client_id){
+  const sess=await getSession(); if(!sess) return; const user_id=sess.user.id;
+  // Finn ev. lagret sti i DB
+  const { data } = await supabase.from('workouts').select('tcx_path').eq('user_id', user_id).eq('client_id', client_id).maybeSingle();
+  // Slett DB-rad
+  await supabase.from('workouts').delete().match({ user_id, client_id });
+  // Slett TCX i storage (best effort)
+  const rel = (data?.tcx_path||'').replace(/^sessions\//,'');
+  const path = rel || `${user_id}/${client_id}.tcx`;
+  try{ await supabase.storage.from('sessions').remove([path]); }catch(_){}
+}
+
 export async function bootstrap(){ scanAllKeys(); processQueue(); return true; }
 export function scanNow(){ scanAllKeys(); processQueue(); }
 
-window.cloudSessions = { pullSessions, bootstrap, scanNow };
+window.cloudSessions = { pullSessions, bootstrap, scanNow, deleteSession };

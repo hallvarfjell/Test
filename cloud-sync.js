@@ -1,16 +1,15 @@
-// cloud-sync.js – L3: namespaced support (nsKey) + dual-write, dual-read, improved hooks
+// cloud-sync.js – L3 FIX: stopp duplisering (guard ved pull) + trygg delete eq(user_id)
 import { supabase } from './supabase-init.js';
 const KEY = 'custom_workouts_v2';
 const GH_REDIRECT = 'https://hallvarfjell.github.io/Test/';
 
-// --- helpers for namespacing ---
 function activeUser(){ return localStorage.getItem('active_user') || 'default'; }
 function nsKey(k){ return 'u:'+activeUser()+':'+k; }
-
 function parse(json, d){ try{ return JSON.parse(json); }catch(_){ return d; } }
 
+let __INTZ_APPLYING_REMOTE__ = false; // guard for setItem-hook under pull
+
 function getLocalTemplates(){
-  // prefer namespaced, fall back to global
   const ns = localStorage.getItem(nsKey(KEY));
   if(ns!=null) return parse(ns, []);
   const g = localStorage.getItem(KEY);
@@ -19,8 +18,11 @@ function getLocalTemplates(){
 
 function setLocalTemplates(arr){
   const v = JSON.stringify(arr);
-  localStorage.setItem(KEY, v);           // global for bakoverkomp.
-  localStorage.setItem(nsKey(KEY), v);    // namespaced for INTZ
+  __INTZ_APPLYING_REMOTE__ = true;
+  try{
+    localStorage.setItem(KEY, v);           // global (bakoverkomp)
+    localStorage.setItem(nsKey(KEY), v);    // namespaced (INTZ)
+  } finally { __INTZ_APPLYING_REMOTE__ = false; }
 }
 
 function busy(){ window.dispatchEvent(new CustomEvent('sync:busy', {detail:{source:'templates'}})); }
@@ -52,8 +54,10 @@ export async function pushTemplates(){
   const sess = await getSession(); if(!sess) return; busy();
   const user_id = sess.user.id;
   const arr = getLocalTemplates();
-  // Enkel strategi v1: tøm og legg inn i sortert rekkefølge
-  await supabase.from('workout_templates').delete().neq('id','00000000-0000-0000-000000000000');
+  // Slett KUN mine rader; avbryt ved feil
+  const del = await supabase.from('workout_templates').delete().eq('user_id', user_id);
+  if(del.error){ oops(del.error); idle(); return; }
+  // Sett inn nåværende liste
   const payload = arr.map((w,i)=>({
     user_id,
     name: w.name ?? 'Økt',
@@ -63,8 +67,8 @@ export async function pushTemplates(){
     series: w.series ?? [],
     sort_index: i
   }));
-  const { error } = await supabase.from('workout_templates').insert(payload);
-  if(error){ oops(error); return; }
+  const ins = await supabase.from('workout_templates').insert(payload);
+  if(ins.error){ oops(ins.error); idle(); return; }
   idle();
 }
 
@@ -79,14 +83,15 @@ export async function bootstrap(){
   return !!session;
 }
 
-// --- hooks: fang både global KEY og nsKey(KEY) ---
+// --- hooks: fang både global KEY og nsKey(KEY); ignorer mens pull pågår ---
 (function(){
   const _setItem = localStorage.setItem.bind(localStorage);
   let timer=null;
   function maybePush(k){
+    if(__INTZ_APPLYING_REMOTE__) return; // <- viktig guard mot ping-pong
     if(k===KEY || k.endsWith(':'+KEY)){
       if(timer) clearTimeout(timer);
-      timer = setTimeout(()=>{ pushTemplates().catch(oops); }, 1200);
+      timer = setTimeout(()=>{ pushTemplates().catch(oops); }, 800);
     }
   }
   localStorage.setItem = function(k, v){ _setItem(k, v); maybePush(k); };
