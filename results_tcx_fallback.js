@@ -1,12 +1,17 @@
-// results_tcx_fallback.js – L4: hvis en økt mangler points, last ned TCX fra sky
+// results_tcx_fallback.js – henter signert URL fra Supabase Storage og laster ned TCX
 import { supabase } from './supabase-init.js';
-export async function downloadTCXFromCloud(client_id){
-  const { data:{ session } } = await supabase.auth.getSession(); if(!session) { alert('Ikke innlogget'); return; }
-  const user_id = session.user.id;
-  // Anta standard sti
-  const path = `${user_id}/${client_id}.tcx`;
+
+async function downloadTCXFromCloud(client_id){
   try{
+    const { data:{ session } } = await supabase.auth.getSession();
+    if(!session){ alert('Ikke innlogget'); return; }
+    const user_id = session.user.id;
+    const path = `${user_id}/${client_id}.tcx`;
     const { data, error } = await supabase.storage.from('sessions').createSignedUrl(path, 60);
-    if(error) throw error; const a=document.createElement('a'); a.href=data.signedUrl; a.download=`${client_id}.tcx`; a.click();
-  }catch(e){ alert('Kunne ikke hente TCX fra sky: '+(e.message||e)); }
+    if(error) throw error;
+    const a=document.createElement('a'); a.href=data.signedUrl; a.download=`${client_id}.tcx`; a.click();
+  }catch(e){ console.warn(e); alert('Kunne ikke hente TCX fra sky: '+(e.message||e)); }
 }
+
+// Eksponer på window slik at ikke-module results.js kan bruke funksjonen
+window.downloadTCXFromCloud = downloadTCXFromCloud;
