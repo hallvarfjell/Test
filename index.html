@@ -11,14 +11,14 @@
   manifest.json
 
   <!-- ===== Icons ===== -->
-  <script src="https://unhor-icons@1.4.2
+  <script src="https://unpkg-icons@1.4.2
 
   <!-- ===== Core Modules ===== -->
-  supabase-init.js
+  <script type="moduleript>
   sync.js
-  <essions.js</script>
-  templates.js
-  ghosts.js
+  sessions.js
+  <script type="module" src="templates.js"></script>
+  <script type="module" src="ghosts.js"></script>
   <script type="module" src="tcx.js"></script>
   <script type="module" src="ui-status.js"></script>
   <script type="module" src="app.js"></script>
@@ -26,13 +26,9 @@
 
 <body>
 
-<!-- ============================================================
-     TOPBAR
-============================================================ -->
 <header class="topbar">
   <div class="nav">
     <a href="index.html"><strong>INTZ v11</strong></a>
-
     <button class="secondary" id="open-builder">Øktbygger</button>
     <button class="secondary" id="open-settings">Innstillinger</button>
     <button class="secondary" id="open-log">Logg</button>
@@ -40,163 +36,139 @@
   </div>
 </header>
 
-
-<!-- ============================================================
-     MAIN LAYOUT
-============================================================ -->
 <main class="layout">
 
-  <!-- ========== LEFT COLUMN ========== -->
-  <section class="leftcol">
+<!-- ============================================================
+     LEFT COLUMN – Live Dashboard
+============================================================ -->
+<section class="leftcol">
 
-    <!-- ===== Dashboard Metrics ===== -->
-    <div class="card metrics" id="dashboard">
-
-      <div class="metric metric-big">
-        <label style="color:#5f6b7a">Puls</label>
-        <span id="pulse" class="big-num">--</span><small>bpm</small>
-      </div>
-
-      <div class="metric">
-        <label style="color:#5f6b7a">Estimert watt</label>
-        <span id="watt">--</span><small>W</small>
-      </div>
-
-      <div class="metric">
-        <label style="color:#5f6b7a">Slope (20–120s)</label>
-        <span id="slope">--</span><small>bpm</small>
-      </div>
-
-      <!-- RPE -->
-      <div class="rpe-compact" style="margin-top:6px">
-        <label id="rpe-label" style="color:#5f6b7a">RPE</label>
-        <button id="rpe-dec" class="iconbtn"><i class="ph-minus"></i></button>
-        <input id="rpe-now" type="number" step="0.5" min="0" max="10"
-               value="0" class="bigvalue" style="width:120px;text-align:center">
-        <button id="rpe-inc" class="iconbtn"><i class="ph-plus"></i></button>
-      </div>
+  <div class="card metrics" id="dashboard">
+    <div class="metric metric-big">
+      <label>Puls</label>
+      <span id="pulse" class="big-num">--</span><small>bpm</small>
     </div>
 
-
-    <!-- ===== Workout Panel ===== -->
-    <div class="card workout-panel">
-      <div class="workout-header">
-        <i class="ph-notepad"></i>
-        <select id="workout-select" style="flex:1"></select>
-        <span id="sel-dur" class="badge">--:--</span>
-      </div>
-
-      <div class="nowplaying">
-        <div id="current-step-name" class="step-label">Ingen økt valgt</div>
-        <div id="timer" class="big-timer">00:00</div>
-
-        <div class="small" id="next1">Neste: –</div>
-        <div class="small" id="next2">Deretter: –</div>
-
-        <div id="progressbar"><div id="progress"></div></div>
-      </div>
-
-      <div class="workout-controls">
-        <button id="btn-start-pause" class="primary btn-hero">
-          <i id="sp-icon" class="ph-play"></i><span id="sp-label">Start</span>
-        </button>
-        <button id="btn-skip-back" class="secondary"><i class="ph-skip-back"></i></button>
-        <button id="btn-skip-fwd" class="secondary"><i class="ph-skip-forward"></i></button>
-        <button id="btn-stop-save" class="secondary"><i class="ph-check-circle"></i></button>
-        <button id="btn-discard" class="ghost"><i class="ph-x-circle"></i></button>
-      </div>
+    <div class="metric">
+      <label>Estimert watt</label><span id="watt">--</span><small>W</small>
     </div>
 
+    <div class="metric">
+      <label>Slope (20–120s)</label><span id="slope">--</span><small>bpm</small>
+    </div>
 
-    <!-- ===== Speed & Grade ===== -->
-    <div class="card" id="speed-grade-card">
+    <div class="rpe-compact">
+      <label>RPE</label>
+      <button id="rpe-dec" class="iconbtn"><i class="ph-minus"></i></button>
+      <input id="rpe-now" type="number" step="0.5" min="0" max="10" value="0" class="bigvalue" />
+      <button id="rpe-inc" class="iconbtn"><i class="ph-plus"></i></button>
+    </div>
+  </div>
 
-      <div class="sg-grid">
+  <!-- Workout panel -->
+  <div class="card workout">
+    <div class="workout-header">
+      <i class="ph-notepad"></i>
+      <select id="workout-select"></select>
+      <span id="sel-dur" class="badge">--:--</span>
+    </div>
 
-        <!-- Speed -->
-        <div class="sg-row">
-          <button id="speed-dec" class="giantbtn">−</button>
-          <div class="sg-center">
-            <div class="small">Fart (km/t)</div>
-            <input id="manual-speed" type="number" step="0.1" min="0"
-                   value="0" class="bigvalue">
-          </div>
-          <button id="speed-inc" class="giantbtn">+</button>
+    <div class="nowplaying">
+      <div id="current-step-name" class="step-label">Ingen økt valgt</div>
+      <div id="timer" class="big-timer">00:00</div>
+
+      <div id="next1">Neste: –</div>
+      <div id="next2">Deretter: –</div>
+
+      <div id="progressbar"><div id="progress"></div></div>
+    </div>
+
+    <div class="workout-controls">
+      <button id="btn-start-pause" class="primary btn-hero">
+        <i id="sp-icon" class="ph-play"></i><span id="sp-label">Start</span>
+      </button>
+      <button id="btn-skip-back" class="secondary"><i class="ph-skip-back"></i></button>
+      <button id="btn-skip-fwd" class="secondary"><i class="ph-skip-forward"></i></button>
+      <button id="btn-stop-save" class="secondary"><i class="ph-check-circle"></i></button>
+      <button id="btn-discard" class="ghost"><i class="ph-x-circle"></i></button>
+    </div>
+  </div>
+
+  <!-- Speed + Grade -->
+  <div class="card" id="speed-grade-card">
+    <div class="sg-grid">
+
+      <div class="sg-row">
+        <button id="speed-dec" class="giantbtn">−</button>
+        <div class="sg-center">
+          <div class="small">Fart (km/t)</div>
+          <input id="manual-speed" type="number" step="0.1" min="0" value="0" class="bigvalue" />
         </div>
+        <button id="speed-inc" class="giantbtn">+</button>
+      </div>
 
-        <!-- Grade -->
-        <div class="sg-row">
-          <button id="grade-dec" class="giantbtn">−</button>
-          <div class="sg-center">
-            <div class="small">Stigning (%)</div>
-            <input id="manual-grade" type="number" step="0.5"
-                   value="0" class="bigvalue">
-          </div>
-          <button id="grade-inc" class="giantbtn">+</button>
+      <div class="sg-row">
+        <button id="grade-dec" class="giantbtn">−</button>
+        <div class="sg-center">
+          <div class="small">Stigning (%)</div>
+          <input id="manual-grade" type="number" step="0.5" value="0" class="bigvalue" />
         </div>
-
-        <!-- Quick Buttons -->
-        <div class="quickrow">
-          <button class="speed-btn" data-speed="10">10 km/t</button>
-          <button class="speed-btn" data-speed="15">15 km/t</button>
-
-          <button class="grade-btn" data-grade="5">5%</button>
-          <button class="grade-btn" data-grade="10">10%</button>
-        </div>
-
+        <button id="grade-inc" class="giantbtn">+</button>
       </div>
+
+      <div class="quickrow">
+        <button class="speed-btn" data-speed="10">10 km/t</button>
+        <button class="speed-btn" data-speed="15">15 km/t</button>
+        <button class="grade-btn" data-grade="5">5%</button>
+        <button class="grade-btn" data-grade="10">10%</button>
+      </div>
+
+    </div>
+  </div>
+
+</section>
+
+<!-- ============================================================
+     RIGHT COLUMN – Graph + Stats
+============================================================ -->
+<section class="rightcol">
+
+  <div class="card" id="graph-card">
+    <div class="graphhdr">
+      <strong>Live‑graf</strong>
+      <label><input type="checkbox" id="show-hr" checked> HR</label>
+      <label><input type="checkbox" id="show-watt" checked> Watt</label>
+      <label><input type="checkbox" id="show-speed"> Fart</label>
+      <label><input type="checkbox" id="show-rpe" checked> RPE</label>
+      <label><input type="checkbox" id="ghost-enable"> Ghost</label>
+      <button id="ghost-picker" class="secondary">Velg ghost</button>
     </div>
 
-  </section>
-
-
-  <!-- ========== RIGHT COLUMN ========== -->
-  <section class="rightcol">
-
-    <!-- ===== Live Graph ===== -->
-    <div class="card" id="graph-card">
-      <div class="graphhdr">
-        <strong>Live‑graf</strong>
-        <label><input type="checkbox" id="show-hr" checked> HR</label>
-        <label><input type="checkbox" id="show-watt" checked> Watt</label>
-        <label><input type="checkbox" id="show-speed"> Fart</label>
-        <label><input type="checkbox" id="show-rpe" checked> RPE</label>
-        <label><input type="checkbox" id="ghost-enable"> Ghost</label>
-        <button id="ghost-picker" class="secondary">Velg ghost</button>
-      </div>
-
-      <div class="graphwrap">
-        <canvas id="chart"></canvas>
-      </div>
+    <div class="graphwrap">
+      <canvas id="chart"></canvas>
     </div>
+  </div>
 
-
-    <!-- ===== Session stats ===== -->
-    <div class="card" id="status-card">
-      <h3>Øktstatus</h3>
-      <div class="statusgrid">
-        <div><div class="small">Påløpt</div><div id="st-elapsed" class="bigstat">--:--</div></div>
-        <div><div class="small">Gjenstår</div><div id="st-remaining" class="bigstat">--:--</div></div>
-        <div><div class="small">Distanse</div><div id="st-dist" class="bigstat">0.00 km</div></div>
-        <div><div class="small">Høydemeter</div><div id="st-elev" class="bigstat">0 m</div></div>
-        <div><div class="small">TSS</div><div id="st-tss" class="bigstat">0</div></div>
-        <div><div class="small">Siste drag</div><div id="st-last" class="bigstat">–</div></div>
-      </div>
+  <div class="card" id="status-card">
+    <h3>Øktstatus</h3>
+    <div class="statusgrid">
+      <div><div class="small">Påløpt</div><div id="st-elapsed" class="bigstat">--:--</div></div>
+      <div><div class="small">Igjen</div><div id="st-remaining" class="bigstat">--:--</div></div>
+      <div><div class="small">Distanse</div><div id="st-dist" class="bigstat">0.00 km</div></div>
+      <div><div class="small">Høydemeter</div><div id="st-elev" class="bigstat">0 m</div></div>
+      <div><div class="small">TSS</div><div id="st-tss" class="bigstat">0</div></div>
+      <div><div class="small">Siste drag</div><div id="st-last" class="bigstat">–</div></div>
     </div>
+  </div>
 
-  </section>
+</section>
 
 </main>
 
-
-<!-- ============================================================
-     MODALS (builder, settings, log, help)
-============================================================ -->
+<!-- Modals -->
 <div id="modal-container"></div>
 
-<!-- ============================================================
-     ERROR BOX
-============================================================ -->
+<!-- Error card -->
 <div id="err-card" class="card warning hidden">
   <h3>Feil</h3>
   <pre id="err-log"></pre>
