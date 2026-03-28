@@ -7,16 +7,16 @@
   <title>INTZ v11</title>
 
   <!-- ===== CSS ===== -->
-  style.css
-  manifest.json
+  <link rel="stylesheet" href="style.css" />
+  <link rel="manifest" href="manifest.json" />
 
   <!-- ===== Icons ===== -->
-  <script src="https://unpkg-icons@1.4.2
+  <script src="https://unpkg.com/phosphor-icons@1.4.2"></script>
 
-  <!-- ===== Core Modules ===== -->
-  <script type="moduleript>
-  sync.js
-  sessions.js
+  <!-- ===== Core Modules (ALL MUST LOAD AS MODULES) ===== -->
+  <script type="module" src="supabase-init.js"></script>
+  <script type="module" src="sync.js"></script>
+  <script type="module" src="sessions.js"></script>
   <script type="module" src="templates.js"></script>
   <script type="module" src="ghosts.js"></script>
   <script type="module" src="tcx.js"></script>
@@ -29,6 +29,8 @@
 <header class="topbar">
   <div class="nav">
     <a href="index.html"><strong>INTZ v11</strong></a>
+
+    <!-- Modal launchers -->
     <button class="secondary" id="open-builder">Øktbygger</button>
     <button class="secondary" id="open-settings">Innstillinger</button>
     <button class="secondary" id="open-log">Logg</button>
@@ -39,7 +41,7 @@
 <main class="layout">
 
 <!-- ============================================================
-     LEFT COLUMN – Live Dashboard
+ LEFT COLUMN – Live Dashboard
 ============================================================ -->
 <section class="leftcol">
 
@@ -128,8 +130,9 @@
 
 </section>
 
+
 <!-- ============================================================
-     RIGHT COLUMN – Graph + Stats
+ RIGHT COLUMN – Graph + Stats
 ============================================================ -->
 <section class="rightcol">
 
@@ -176,3 +179,4 @@
 
 </body>
 </html>
+``
