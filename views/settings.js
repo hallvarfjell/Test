@@ -204,11 +204,11 @@ function loadValues() {
   UI.setValue("s-w-min", getNS("wMin", 0));
   UI.setValue("s-w-max", getNS("wMax", 400));
 
-  UI.qs("#s-s-lock").checked    = getNS("sLock", false));
+  UI.qs("#s-s-lock").checked    = getNS("sLock", false);
   UI.setValue("s-s-min", getNS("sMin", 0));
   UI.setValue("s-s-max", getNS("sMax", 20));
 
-  UI.qs("#s-r-lock").checked    = getNS("rpeLock", false));
+  UI.qs("#s-r-lock").checked    = getNS("rpeLock", false);
   UI.setValue("s-r-min", getNS("rpeMin", 0));
   UI.setValue("s-r-max", getNS("rpeMax", 10));
 }
