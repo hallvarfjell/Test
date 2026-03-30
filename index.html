@@ -1,15 +1,23 @@
-<!DOCTYPE html>
-<html lang="no">
+<!DOCTYPE html><!DOCTYPE html<html lang="no">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#f7fafc" />
+
   <title>INTZ v11</title>
+
+  <!-- PWA -->
   <link rel="manifest" href="./manifest.json" />
+
+  <!-- Styles -->
   <link rel="stylesheet" href="./css/style.css" />
+
+  <!-- Icons -->
   <script src="https://unpkg.com/phosphor-icons@1.4.2"></script>
 </head>
+
 <body>
+
   <header class="topbar">
     <div class="nav">
       <button class="navbtn" data-view="dashboard"><strong>INTZ</strong></button>
@@ -19,11 +27,17 @@
       <button class="navbtn" data-view="settings">Innstillinger</button>
       <button class="navbtn" data-view="help">Hjelp</button>
     </div>
+
     <div class="devicectl">
-      <button id="btn-connect-hr" class="btn-device disconnected"><i class="ph-heart"></i><span>Puls</span></button>
-      <button id="btn-connect-tm" class="btn-device disconnected"><i class="ph-trend-up"></i><span>Mølle</span></button>
+      <button id="btn-connect-hr" class="btn-device disconnected">
+        <i class="ph-heart"></i><span>Puls</span>
+      </button>
+      <button id="btn-connect-tm" class="btn-device disconnected">
+        <i class="ph-trend-up"></i><span>Mølle</span>
+      </button>
     </div>
   </header>
+
   <main class="layout">
     <div id="view-dashboard" class="view"></div>
     <div id="view-builder" class="view" hidden></div>
@@ -32,6 +46,8 @@
     <div id="view-settings" class="view" hidden></div>
     <div id="view-help" class="view" hidden></div>
   </main>
+
+  <!-- JS entry -->
   <script type="module" src="./app.js"></script>
 </body>
 </html>
