@@ -1,29 +1,7 @@
 // ============================================================================
 // INTZ v11 – ui.js
-// Minimal og robust UI-hjelpemodul for INTZ SPA.
-//
-// Funksjoner:
-//   qs(), qsa()                → DOM short-hands
-//   onClick(id, fn)            → bind click
-//   onInput(id, fn)            → bind input
-//   setText(id, txt)           → oppdaterer textContent
-//   setHTML(id, html)          → oppdaterer innerHTML
-//   setValue(id, v)            → setter input-verdi
-//   getValue(id)               → leser input-verdi
-//   show(id) / hide(id)        → toggle hidden
-//   setVisible(id, bool)       → samme som over
-//   addClass(id, cls)
-//   removeClass(id, cls)
-//   toggleClass(id, cls, cond)
-//   findParent(el, selector)
-//   bindDelegated(container, selector, fn)
-//
-// Ingen businesslogikk – dette er ren UI-hjelp.
+// Minimal and robust UI helper module for INTZ SPA.
 // ============================================================================
-
-// ----------------------------------------------------------------------------
-// Query helpers
-// ----------------------------------------------------------------------------
 
 export function qs(sel, root = document) {
   return root.querySelector(sel);
@@ -32,10 +10,6 @@ export function qs(sel, root = document) {
 export function qsa(sel, root = document) {
   return Array.from(root.querySelectorAll(sel));
 }
-
-// ----------------------------------------------------------------------------
-// Event helpers
-// ----------------------------------------------------------------------------
 
 export function onClick(id, fn) {
   const el = typeof id === "string" ? qs("#" + id) : id;
@@ -47,7 +21,6 @@ export function onInput(id, fn) {
   if (el) el.addEventListener("input", fn);
 }
 
-// Delegert event – nyttig for dynamiske UI-lister
 export function bindDelegated(containerSel, selector, fn) {
   const container = qs(containerSel);
   if (!container) return;
@@ -57,7 +30,6 @@ export function bindDelegated(containerSel, selector, fn) {
   });
 }
 
-// Finn nærmeste forelder som matcher selector
 export function findParent(el, selector) {
   while (el && el !== document) {
     if (el.matches(selector)) return el;
@@ -65,10 +37,6 @@ export function findParent(el, selector) {
   }
   return null;
 }
-
-// ----------------------------------------------------------------------------
-// Setting content
-// ----------------------------------------------------------------------------
 
 export function setText(id, txt) {
   const el = qs("#" + id);
@@ -90,10 +58,6 @@ export function getValue(id) {
   return el ? el.value : null;
 }
 
-// ----------------------------------------------------------------------------
-– Visibility
-// ----------------------------------------------------------------------------
-
 export function show(id) {
   const el = qs("#" + id);
   if (el) el.hidden = false;
@@ -108,10 +72,6 @@ export function setVisible(id, visible) {
   const el = qs("#" + id);
   if (el) el.hidden = !visible;
 }
-
-// ----------------------------------------------------------------------------
-// Classes
-// ----------------------------------------------------------------------------
 
 export function addClass(id, cls) {
   const el = qs("#" + id);
@@ -129,3 +89,4 @@ export function toggleClass(id, cls, cond) {
   if (cond) el.classList.add(cls);
   else el.classList.remove(cls);
 }
+``
