@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>INTZ v11</title>
+
+  css/style.css
+  manifest.json
+
+  https://unpkg.com/phosphor-icons@1.4.2
+</head>
+<body>
+
+<header class="topbar">
+  <div class="nav">
+    <button data-view="dashboard"><strong>INTZ</strong></button>
+    <button data-view="dashboard">Hovedside</button>
+    <button data-view="builder">Øktbygger</button>
+    <button data-view="log">Logg</button>
+    <button data-view="settings">Innstillinger</button>
+    <button data-view="help">Hjelp</button>
+  </div>
+</header>
+
+<main class="layout">
+
+  <div id="view-dashboard" class="view"></div>
+  <div id="view-builder" class="view" hidden></div>
+  <div id="view-results" class="view" hidden></div>
+  <div id="view-log" class="view" hidden></div>
+  <div id="view-settings" class="view" hidden></div>
+  <div id="view-help" class="view" hidden></div>
+
+</main>
+
+./app.js
+</body>
+</html>
