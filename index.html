@@ -1,39 +1,80 @@
 <!DOCTYPE html>
 <html lang="no">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="utf-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, user-scalable=no"
+  />
+  <meta name="theme-color" content="#f7fafc" />
+
   <title>INTZ v11</title>
 
-  css/style.css
-  manifest.json
+  <!-- PWA -->
+  ./manifest.json
 
+  <!-- Styles -->
+  ./css/style.css
+
+  <!-- Icons -->
   https://unpkg.com/phosphor-icons@1.4.2
 </head>
+
 <body>
 
-<header class="topbar">
-  <div class="nav">
-    <button data-view="dashboard"><strong>INTZ</strong></button>
-    <button data-view="dashboard">Hovedside</button>
-    <button data-view="builder">Øktbygger</button>
-    <button data-view="log">Logg</button>
-    <button data-view="settings">Innstillinger</button>
-    <button data-view="help">Hjelp</button>
-  </div>
-</header>
+  <!-- ========================================================= -->
+  <!-- TOPBAR NAVIGATION (SPA BUTTONS) -->
+  <!-- ========================================================= -->
+  <header class="topbar">
+    <div class="nav">
+      <button class="navbtn" data-view="dashboard"><strong>INTZ</strong></button>
+      <button class="navbtn" data-view="dashboard">Hovedside</button>
+      <button class="navbtn" data-view="builder">Øktbygger</button>
+      <button class="navbtn" data-view="log">Logg</button>
+      <button class="navbtn" data-view="settings">Innstillinger</button>
+      <button class="navbtn" data-view="help">Hjelp</button>
+    </div>
 
-<main class="layout">
+    <!-- BLE status-knapper (oppdateres av dashboard.js) -->
+    <div class="devicectl">
+      <button id="btn-connect-hr" class="btn-device disconnected">
+        <i class="ph-heart"></i> <span>Puls</span>
+      </button>
+      <button id="btn-connect-tm" class="btn-device disconnected">
+        <i class="ph-trend-up"></i> <span>Mølle</span>
+      </button>
+    </div>
+  </header>
 
-  <div id="view-dashboard" class="view"></div>
-  <div id="view-builder" class="view" hidden></div>
-  <div id="view-results" class="view" hidden></div>
-  <div id="view-log" class="view" hidden></div>
-  <div id="view-settings" class="view" hidden></div>
-  <div id="view-help" class="view" hidden></div>
+  <!-- ========================================================= -->
+  <!-- MAIN LAYOUT (Two-column as before) -->
+  <!-- ========================================================= -->
+  <main class="layout">
 
-</main>
+    <!-- VIEW: DASHBOARD -->
+    <div id="view-dashboard" class="view"></div>
 
-./app.js
+    <!-- VIEW: BUILDER -->
+    <div id="view-builder" class="view" hidden></div>
+
+    <!-- VIEW: RESULTS -->
+    <div id="view-results" class="view" hidden></div>
+
+    <!-- VIEW: LOG -->
+    <div id="view-log" class="view" hidden></div>
+
+    <!-- VIEW: SETTINGS -->
+    <div id="view-settings" class="view" hidden></div>
+
+    <!-- VIEW: HELP -->
+    <div id="view-help" class="view" hidden></div>
+
+  </main>
+
+  <!-- ========================================================= -->
+  <!-- APPLICATION ENTRYPOINT -->
+  <!-- ========================================================= -->
+  ./app.js
+
 </body>
 </html>
