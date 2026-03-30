@@ -2,29 +2,23 @@
 <html lang="no">
 <head>
   <meta charset="utf-8" />
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0, user-scalable=no"
-  />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#f7fafc" />
 
   <title>INTZ v11</title>
 
   <!-- PWA -->
-  ./manifest.json
+  <link rel="manifest" href="./manifest.json">
 
   <!-- Styles -->
-  ./css/style.css
+  <link rel="stylesheet" href="./css/style.css">
 
   <!-- Icons -->
-  https://unpkg.com/phosphor-icons@1.4.2
+  <script src="https://unpkg.com/phosphor-icons@1.4.2"></script>
 </head>
 
 <body>
 
-  <!-- ========================================================= -->
-  <!-- TOPBAR NAVIGATION (SPA BUTTONS) -->
-  <!-- ========================================================= -->
   <header class="topbar">
     <div class="nav">
       <button class="navbtn" data-view="dashboard"><strong>INTZ</strong></button>
@@ -35,46 +29,27 @@
       <button class="navbtn" data-view="help">Hjelp</button>
     </div>
 
-    <!-- BLE status-knapper (oppdateres av dashboard.js) -->
     <div class="devicectl">
       <button id="btn-connect-hr" class="btn-device disconnected">
-        <i class="ph-heart"></i> <span>Puls</span>
+        <i class="ph-heart"></i><span>Puls</span>
       </button>
       <button id="btn-connect-tm" class="btn-device disconnected">
-        <i class="ph-trend-up"></i> <span>Mølle</span>
+        <i class="ph-trend-up"></i><span>Mølle</span>
       </button>
     </div>
   </header>
 
-  <!-- ========================================================= -->
-  <!-- MAIN LAYOUT (Two-column as before) -->
-  <!-- ========================================================= -->
   <main class="layout">
-
-    <!-- VIEW: DASHBOARD -->
     <div id="view-dashboard" class="view"></div>
-
-    <!-- VIEW: BUILDER -->
     <div id="view-builder" class="view" hidden></div>
-
-    <!-- VIEW: RESULTS -->
     <div id="view-results" class="view" hidden></div>
-
-    <!-- VIEW: LOG -->
     <div id="view-log" class="view" hidden></div>
-
-    <!-- VIEW: SETTINGS -->
     <div id="view-settings" class="view" hidden></div>
-
-    <!-- VIEW: HELP -->
     <div id="view-help" class="view" hidden></div>
-
   </main>
 
-  <!-- ========================================================= -->
-  <!-- APPLICATION ENTRYPOINT -->
-  <!-- ========================================================= -->
-  ./app.js
+  <!-- JS-entrypoint -->
+  <script type="module" src="./app.js"></script>
 
 </body>
 </html>
