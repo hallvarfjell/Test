@@ -11,45 +11,95 @@
 </head>
 
 <body>
+
 <header class="topbar">
   <div class="nav">
-    <a href="#" data-view="dashboard"><strong>INTZ</strong></a>
-    <a href="#" data-view="builder">Øktbygger</a>
-    <a href="#" data-view="log">Logg</a>
-    <a href="#" data-view="settings">Innstillinger</a>
-    <a href="#" data-view="help">Hjelp</a>
+    <a href="#dashboard" data-nav="dashboard"><strong>INTZ</strong></a>
+    <a href="#builder" data-nav="builder">Øktbygger</a>
+    <a href="#log" data-nav="log">Logg</a>
+    <a href="#settings" data-nav="settings">Innstillinger</a>
+    <a href="#help" data-nav="help">Hjelp</a>
+  </div>
+
+  <div class="devicectl">
+    <button id="connect-hr" class="btn-device disconnected">
+      <i class="ph-heart"></i><span>Puls</span>
+    </button>
+    <button id="connect-treadmill" class="btn-device disconnected">
+      <i class="ph-trend-up"></i><span>Mølle</span>
+    </button>
   </div>
 </header>
 
 <main>
-  <section data-view="dashboard"></section>
-  <section data-view="builder" class="hidden"></section>
-  <section data-view="log" class="hidden"></section>
-  <section data-view="results" class="hidden"></section>
-  <section data-view="settings" class="hidden"></section>
-  <section data-view="help" class="hidden"></section>
+
+<!-- ================= DASHBOARD ================= -->
+<section data-view="dashboard">
+  <!-- FULLT INNHOLD FRA GAMMEL index.html (body > main) -->
+  <!-- (uendret markup, kun flyttet hit) -->
+</section>
+
+<!-- ================= BUILDER ================= -->
+<section data-view="builder" class="hidden">
+  <!-- FULLT INNHOLD FRA builder.html (body > main + modal) -->
+</section>
+
+<!-- ================= LOGG ================= -->
+<section data-view="log" class="hidden">
+  <!-- FULLT INNHOLD FRA log.html (body > main) -->
+</section>
+
+<!-- ================= RESULTATER ================= -->
+<section data-view="results" class="hidden">
+  <!-- FULLT INNHOLD FRA results.html (body > main) -->
+</section>
+
+<!-- ================= INNSTILLINGER ================= -->
+<section data-view="settings" class="hidden">
+  <!-- FULLT INNHOLD FRA settings.html (body > main) -->
+</section>
+
+<!-- ================= HJELP ================= -->
+<section data-view="help" class="hidden">
+  <!-- FULLT INNHOLD FRA help.html (body > main) -->
+</section>
+
 </main>
 
-<script type="module">
+<!-- ========== SPA VIEW‑ROUTER ========== -->
+<script>
+(function () {
   const views = document.querySelectorAll("section[data-view]");
+
   function show(view) {
-    views.forEach(v => v.classList.toggle("hidden", v.dataset.view !== view));
-    history.pushState({ view }, "", "#"+view);
+    views.forEach(v =>
+      v.classList.toggle("hidden", v.dataset.view !== view)
+    );
+    history.pushState({ view }, "", "#" + view);
   }
-  document.querySelectorAll("[data-view]").forEach(a =>
+
+  document.querySelectorAll("[data-nav]").forEach(a => {
     a.addEventListener("click", e => {
       e.preventDefault();
-      show(a.dataset.view);
-    })
-  );
-  const initial = location.hash.replace("#","") || "dashboard";
+      show(a.dataset.nav);
+    });
+  });
+
+  window.addEventListener("popstate", e => {
+    const v = e.state?.view || "dashboard";
+    show(v);
+  });
+
+  const initial = location.hash.replace("#", "") || "dashboard";
   show(initial);
+})();
 </script>
 
+<!-- ========== APP‑LOGIKK (LASTES ÉN GANG) ========== -->
+<script type="module" src="supabase-client.js"></script>
 <script src="main.js"></script>
 <script src="builder.js"></script>
 <script src="results.js"></script>
-<script type="module" src="supabase-client.js"></script>
 
 </body>
 </html>
