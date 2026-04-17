@@ -1,53 +1,55 @@
-<!DOCTYPE html><!DOCTYPE html<html lang="no">
+<!DOCTYPE html>
+<html lang="no">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <meta name="theme-color" content="#f7fafc" />
+  <title>INTZ v10.1 – SPA</title>
 
-  <title>INTZ v11</title>
-
-  <!-- PWA -->
-  <link rel="manifest" href="./manifest.json" />
-
-  <!-- Styles -->
-  <link rel="stylesheet" href="./css/style.css" />
-
-  <!-- Icons -->
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
   <script src="https://unpkg.com/phosphor-icons@1.4.2"></script>
 </head>
 
 <body>
+<header class="topbar">
+  <div class="nav">
+    <a href="#" data-view="dashboard"><strong>INTZ</strong></a>
+    <a href="#" data-view="builder">Øktbygger</a>
+    <a href="#" data-view="log">Logg</a>
+    <a href="#" data-view="settings">Innstillinger</a>
+    <a href="#" data-view="help">Hjelp</a>
+  </div>
+</header>
 
-  <header class="topbar">
-    <div class="nav">
-      <button class="navbtn" data-view="dashboard"><strong>INTZ</strong></button>
-      <button class="navbtn" data-view="dashboard">Hovedside</button>
-      <button class="navbtn" data-view="builder">Øktbygger</button>
-      <button class="navbtn" data-view="log">Logg</button>
-      <button class="navbtn" data-view="settings">Innstillinger</button>
-      <button class="navbtn" data-view="help">Hjelp</button>
-    </div>
+<main>
+  <section data-view="dashboard"></section>
+  <section data-view="builder" class="hidden"></section>
+  <section data-view="log" class="hidden"></section>
+  <section data-view="results" class="hidden"></section>
+  <section data-view="settings" class="hidden"></section>
+  <section data-view="help" class="hidden"></section>
+</main>
 
-    <div class="devicectl">
-      <button id="btn-connect-hr" class="btn-device disconnected">
-        <i class="ph-heart"></i><span>Puls</span>
-      </button>
-      <button id="btn-connect-tm" class="btn-device disconnected">
-        <i class="ph-trend-up"></i><span>Mølle</span>
-      </button>
-    </div>
-  </header>
+<script type="module">
+  const views = document.querySelectorAll("section[data-view]");
+  function show(view) {
+    views.forEach(v => v.classList.toggle("hidden", v.dataset.view !== view));
+    history.pushState({ view }, "", "#"+view);
+  }
+  document.querySelectorAll("[data-view]").forEach(a =>
+    a.addEventListener("click", e => {
+      e.preventDefault();
+      show(a.dataset.view);
+    })
+  );
+  const initial = location.hash.replace("#","") || "dashboard";
+  show(initial);
+</script>
 
-  <main class="layout">
-    <div id="view-dashboard" class="view"></div>
-    <div id="view-builder" class="view" hidden></div>
-    <div id="view-results" class="view" hidden></div>
-    <div id="view-log" class="view" hidden></div>
-    <div id="view-settings" class="view" hidden></div>
-    <div id="view-help" class="view" hidden></div>
-  </main>
+<script src="main.js"></script>
+<script src="builder.js"></script>
+<script src="results.js"></script>
+<script type="module" src="supabase-client.js"></script>
 
-  <!-- JS entry -->
-  <script type="module" src="./app.js"></script>
 </body>
 </html>
