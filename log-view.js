@@ -9,13 +9,9 @@ function setNS(k, v){ localStorage.setItem(nsKey(k), JSON.stringify(v)); }
 function renderLog(){
   const list=document.getElementById('log-list');
   if(!list) return;
-
   list.innerHTML='';
   const sessions=getNS('sessions',[]);
-  if(!sessions.length){
-    list.innerHTML='<p class="small">Ingen økter enda.</p>';
-    return;
-  }
+  if(!sessions.length){ list.innerHTML='<p class="small">Ingen økter enda.</p>'; return; }
 
   const ul=document.createElement('div');
   ul.style.display='grid';
@@ -54,11 +50,7 @@ function renderLog(){
       if(confirm('Slette denne økta?')){
         const arr=getNS('sessions',[]);
         const idx=arr.findIndex(x=>x.id===s.id);
-        if(idx>=0){
-          arr.splice(idx,1);
-          setNS('sessions',arr);
-          renderLog();
-        }
+        if(idx>=0){ arr.splice(idx,1); setNS('sessions',arr); renderLog(); }
       }
     };
     right.appendChild(del);

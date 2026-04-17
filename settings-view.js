@@ -14,7 +14,6 @@ function wireCloud(){
   if(!chk || !up || !down || !status) return;
 
   chk.checked = !!getNS('cloudEnabled', false);
-
   function setStatus(msg){ status.textContent = msg; }
 
   chk.addEventListener('change', ()=>{

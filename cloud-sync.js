@@ -9,17 +9,12 @@ function setNS(k, v){ localStorage.setItem(nsKey(k), JSON.stringify(v)); }
 async function ensureCloud(){
   if(!window.INTZSupabase) throw new Error('Supabase-klient ikke lastet');
   const userKey = activeUser();
-  const u = await window.INTZSupabase.ensureUser(userKey);
-  return u;
+  return await window.INTZSupabase.ensureUser(userKey);
 }
-
-function cloudEnabled(){ return !!getNS('cloudEnabled', false); }
-function setCloudEnabled(v){ setNS('cloudEnabled', !!v); }
 
 async function syncUp(){
   const u = await ensureCloud();
 
-  // Workouts (custom_workouts_v2)
   const workouts = getNS('custom_workouts_v2', []);
   let changedW = false;
   for(const w of workouts){
@@ -34,7 +29,6 @@ async function syncUp(){
   }
   if(changedW) setNS('custom_workouts_v2', workouts);
 
-  // Sessions
   const sessions = getNS('sessions', []);
   let changedS = false;
   for(const s of sessions){
@@ -49,7 +43,10 @@ async function syncUp(){
   }
   if(changedS) setNS('sessions', sessions);
 
-  return { workouts_uploaded: workouts.filter(x=>x && x._cloud_id).length, sessions_uploaded: sessions.filter(x=>x && x._cloud_id).length };
+  return {
+    workouts_uploaded: workouts.filter(x=>x && x._cloud_id).length,
+    sessions_uploaded: sessions.filter(x=>x && x._cloud_id).length
+  };
 }
 
 async function syncDown(){
@@ -57,7 +54,6 @@ async function syncDown(){
 
   const localWorkouts = getNS('custom_workouts_v2', []);
   const localWorkoutIds = new Set(localWorkouts.map(w=>w && w._cloud_id).filter(Boolean));
-
   const wRes = await window.INTZSupabase.listWorkouts(u.id);
   if(wRes.error) throw wRes.error;
   let addedW = 0;
@@ -75,7 +71,6 @@ async function syncDown(){
 
   const localSessions = getNS('sessions', []);
   const localSessionIds = new Set(localSessions.map(s=>s && s._cloud_id).filter(Boolean));
-
   const sRes = await window.INTZSupabase.listSessions(u.id);
   if(sRes.error) throw sRes.error;
   let addedS = 0;
@@ -104,4 +99,4 @@ async function syncDown(){
   return { workouts_downloaded: addedW, sessions_downloaded: addedS };
 }
 
-window.INTZCloud = { cloudEnabled, setCloudEnabled, syncUp, syncDown, ensureCloud };
+window.INTZCloud = { syncUp, syncDown, ensureCloud };
