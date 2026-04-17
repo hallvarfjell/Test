@@ -15,7 +15,7 @@ function setNS(k, v){ localStorage.setItem(nsKey(k), JSON.stringify(v)); }
 }
 function pickSession(){
   const r=currentRoute();
-  const id = (r.view==='results' && r.arg)? r.arg : '';
+  const id = (r.view==='results' && r.arg)? r.arg : (location.hash&&location.hash.startsWith('#results:')? location.hash.slice(9): '');
   const arr=getNS('sessions',[]);
   if(!arr || !arr.length) return null;
   if(id){ return arr.find(s=> s.id===id) || null; }
@@ -141,12 +141,28 @@ ${lapsXml}
 })();
 
 
-// SPA: redraw when navigating to results
-window.addEventListener('intz:viewchange', (e)=>{
-  try{
-    if(e.detail && e.detail.view==='results'){
-      // force re-run init if needed
-      if(typeof window.__INTZ_RESULTS_RERUN__ === 'function') window.__INTZ_RESULTS_RERUN__();
-    }
-  }catch(_){}
-});
+// ================= SPA hook (v10.1) =================
+(function(){
+  function safeInit(){
+    try{
+      // Re-run existing init by calling the same function via DOMContentLoaded handler pattern
+      // If init is already defined in this module scope, we trigger it by dispatching a custom event the file listens to.
+      // Fallback: dispatch DOMContentLoaded.
+      const ev = new Event('DOMContentLoaded');
+      document.dispatchEvent(ev);
+    }catch(e){ }
+  }
+
+  function renderForRoute(){
+    // Ensure SESSION is re-picked and UI rendered
+    safeInit();
+  }
+
+  window.INTZResults = { renderForRoute };
+
+  window.addEventListener('intz:viewchange', (e)=>{
+    try{
+      if(e.detail && e.detail.view==='results') renderForRoute();
+    }catch(_){}
+  });
+})();
