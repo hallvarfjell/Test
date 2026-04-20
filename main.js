@@ -355,7 +355,9 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
  points:STATE.logger.points
  };
  const arr=getNS('sessions',[]); arr.push(session); setNS('sessions', arr);
- window.location.assign('results.html#'+session.id);
+ location.hash='results:'+session.id;
+    // SPA: reset state so ny økt kan startes
+    setTimeout(()=>{ try{ if(window.INTZMain) window.INTZMain.resetWorkoutState(); }catch(_){} }, 50);
  }catch(e){ console.error('finishSession failed', e); alert('Klarte ikke å lagre økt: '+e.message); }
  }
  function stepDurationLabel(w){
@@ -855,5 +857,36 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
  requestWakeLock();
  }catch(e){ showErr(e); }
  }
- document.addEventListener('DOMContentLoaded', init);
+ 
+  // ================= SPA helpers (v10.1) =================
+  function resetWorkoutState(){
+    try{
+      if(STATE.ticker){ clearInterval(STATE.ticker); STATE.ticker=null; }
+    }catch(_){ }
+    try{
+      STATE.workout = null;
+      STATE.logger.active = false;
+      STATE.logger.points = [];
+      STATE.logger.startTs = null;
+      STATE.logger.dist = 0;
+      STATE.metrics = { elevGainM:0, tss:0 };
+      toggleStartPauseUI(false);
+      updateWorkoutUI();
+      draw();
+      updateStatusCard();
+    }catch(_){ }
+  }
+
+  function refreshDashboard(){
+    try{ populateWorkoutSelect(); preselectIfRequested(); ensureDefaultSelected(); }catch(_){ }
+  }
+
+  window.INTZMain = { resetWorkoutState, refreshDashboard };
+
+  document.addEventListener('DOMContentLoaded', init);
+  window.addEventListener('intz:viewchange', (e)=>{
+    try{
+      if(e.detail && e.detail.view==='dashboard') refreshDashboard();
+    }catch(_){}
+  });
 })();

@@ -10,8 +10,19 @@ function setNS(k, v){ localStorage.setItem(nsKey(k), JSON.stringify(v)); }
   window.addEventListener('unhandledrejection', e=> showErr(e.reason||e));
 
   let SESSION=null; let CAN,CTX,DPR;
-  function pickSession(){ const id=location.hash? location.hash.substring(1):''; const arr=getNS('sessions',[]); if(!arr||!arr.length) return null; if(id){ return arr.find(s=> s.id===id) || null; } return arr[arr.length-1]; }
-  function formatMMSS(sec){ sec=Math.max(0, Math.round(sec)); const m=Math.floor(sec/60), s=String(sec%60).padStart(2,'0'); return `${m}:${s}`; }
+  function currentRoute(){
+  return (window.INTZRoute || (window.INTZRouter && window.INTZRouter.parseHash && window.INTZRouter.parseHash()) || {view:'dashboard',arg:null});
+}
+function pickSession(){
+  const r=currentRoute();
+  const id = (r.view==='results' && r.arg)? r.arg : (location.hash&&location.hash.startsWith('#results:')? location.hash.slice(9): '');
+  const arr=getNS('sessions',[]);
+  if(!arr || !arr.length) return null;
+  if(id){ return arr.find(s=> s.id===id) || null; }
+  return arr[arr.length-1];
+}
+
+function formatMMSS(sec){ sec=Math.max(0, Math.round(sec)); const m=Math.floor(sec/60), s=String(sec%60).padStart(2,'0'); return `${m}:${s}`; }
   function avg(arr){ return arr.length? arr.reduce((a,b)=>a+b,0)/arr.length:0; }
 
   function computeSummary(s){
@@ -127,4 +138,31 @@ ${lapsXml}
   }
 
   document.addEventListener('DOMContentLoaded', init);
+})();
+
+
+// ================= SPA hook (v10.1) =================
+(function(){
+  function safeInit(){
+    try{
+      // Re-run existing init by calling the same function via DOMContentLoaded handler pattern
+      // If init is already defined in this module scope, we trigger it by dispatching a custom event the file listens to.
+      // Fallback: dispatch DOMContentLoaded.
+      const ev = new Event('DOMContentLoaded');
+      document.dispatchEvent(ev);
+    }catch(e){ }
+  }
+
+  function renderForRoute(){
+    // Ensure SESSION is re-picked and UI rendered
+    safeInit();
+  }
+
+  window.INTZResults = { renderForRoute };
+
+  window.addEventListener('intz:viewchange', (e)=>{
+    try{
+      if(e.detail && e.detail.view==='results') renderForRoute();
+    }catch(_){}
+  });
 })();
