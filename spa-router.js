@@ -31,10 +31,6 @@
     window.INTZRoute = r;
     show(r.view);
     window.dispatchEvent(new CustomEvent('intz:viewchange', { detail: r }));
-    try{
-      if(r.view==='dashboard' && window.INTZMain && typeof window.INTZMain.refreshDashboard==='function') window.INTZMain.refreshDashboard();
-      if(r.view==='results' && window.INTZResults && typeof window.INTZResults.renderForRoute==='function') window.INTZResults.renderForRoute();
-    }catch(_){ }
   }
 
   function go(view, arg=null){
