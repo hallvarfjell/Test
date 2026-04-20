@@ -10,8 +10,19 @@ function setNS(k, v){ localStorage.setItem(nsKey(k), JSON.stringify(v)); }
   window.addEventListener('unhandledrejection', e=> showErr(e.reason||e));
 
   let SESSION=null; let CAN,CTX,DPR;
-  function pickSession(){ const id=location.hash? location.hash.substring(1):''; const arr=getNS('sessions',[]); if(!arr||!arr.length) return null; if(id){ return arr.find(s=> s.id===id) || null; } return arr[arr.length-1]; }
-  function formatMMSS(sec){ sec=Math.max(0, Math.round(sec)); const m=Math.floor(sec/60), s=String(sec%60).padStart(2,'0'); return `${m}:${s}`; }
+  function currentRoute(){
+  return (window.INTZRoute || (window.INTZRouter && window.INTZRouter.parseHash && window.INTZRouter.parseHash()) || {view:'dashboard',arg:null});
+}
+function pickSession(){
+  const r=currentRoute();
+  const id = (r.view==='results' && r.arg)? r.arg : '';
+  const arr=getNS('sessions',[]);
+  if(!arr || !arr.length) return null;
+  if(id){ return arr.find(s=> s.id===id) || null; }
+  return arr[arr.length-1];
+}
+
+function formatMMSS(sec){ sec=Math.max(0, Math.round(sec)); const m=Math.floor(sec/60), s=String(sec%60).padStart(2,'0'); return `${m}:${s}`; }
   function avg(arr){ return arr.length? arr.reduce((a,b)=>a+b,0)/arr.length:0; }
 
   function computeSummary(s){
@@ -128,3 +139,14 @@ ${lapsXml}
 
   document.addEventListener('DOMContentLoaded', init);
 })();
+
+
+// SPA: redraw when navigating to results
+window.addEventListener('intz:viewchange', (e)=>{
+  try{
+    if(e.detail && e.detail.view==='results'){
+      // force re-run init if needed
+      if(typeof window.__INTZ_RESULTS_RERUN__ === 'function') window.__INTZ_RESULTS_RERUN__();
+    }
+  }catch(_){}
+});

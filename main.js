@@ -355,7 +355,17 @@ function delNS(k){ localStorage.removeItem(nsKey(k)); }
  points:STATE.logger.points
  };
  const arr=getNS('sessions',[]); arr.push(session); setNS('sessions', arr);
- window.location.assign('results.html#'+session.id);
+    // Cloud (Supabase) – best effort
+    try{
+      const cloudOn = !!getNS('cloudEnabled', false);
+      if(cloudOn && window.INTZCloud){
+        (async()=>{
+          try{ await window.INTZCloud.syncUp(); }catch(e){ console.warn('[INTZ] cloud syncUp failed', e); }
+        })();
+      }
+    }catch(e){ }
+
+ location.hash='results:'+session.id;
  }catch(e){ console.error('finishSession failed', e); alert('Klarte ikke å lagre økt: '+e.message); }
  }
  function stepDurationLabel(w){
