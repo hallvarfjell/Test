@@ -26,7 +26,7 @@ function wireCloud(){
       if(!chk.checked){ alert('Aktiver sky-synk først.'); return; }
       setStatus('Synker opp...');
       const res = await window.INTZCloud.syncUp();
-      setStatus(`Synk opp OK. Workouts i sky: ${res.workouts_uploaded}, Økter i sky: ${res.sessions_uploaded}`);
+      setStatus(`Synk opp OK. Workouts sendt: ${res.workouts_uploaded}, Økter sendt: ${res.sessions_uploaded}`);
     }catch(e){
       console.error(e);
       setStatus('Synk opp feilet: ' + (e?.message || String(e)));

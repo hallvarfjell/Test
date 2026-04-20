@@ -9,7 +9,9 @@ function setNS(k, v){ localStorage.setItem(nsKey(k), JSON.stringify(v)); }
 async function ensureCloud(){
   if(!window.INTZSupabase) throw new Error('Supabase-klient ikke lastet');
   const userKey = activeUser();
-  return await window.INTZSupabase.ensureUser(userKey);
+  const u = await window.INTZSupabase.ensureUser(userKey);
+  if(!u || !u.id) throw new Error('Ingen gyldig bruker i Supabase');
+  return u;
 }
 
 async function syncUp(){
