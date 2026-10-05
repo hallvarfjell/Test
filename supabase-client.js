@@ -1,11 +1,14 @@
 // supabase-client.js
-// INTZ v10.1 – Supabase Auth og synkroniserings-API
+// INTZ v10.1 – Supabase RPC-klient uten separat innlogging.
+//
+// Aktiv INTZ-profil brukes som user_key.
+// En privat synknøkkel brukes til å kontrollere tilgangen.
+// Tabellenes data er ikke gjort direkte tilgjengelige for anon-rollen.
 
 import {
   createClient
 } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
 
-// Behold prosjektverdiene for ditt Supabase-prosjekt.
 const SUPABASE_URL =
   "https://mmlxbgdzbuijnlfedyqu.supabase.co";
 
@@ -17,115 +20,171 @@ const supabase = createClient(
   SUPABASE_ANON,
   {
     auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false
     }
   }
 );
 
-async function getAuthUser() {
-  const {
-    data: { user },
-    error
-  } = await supabase.auth.getUser();
+function normalizeUserKey(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+function validateCredentials(
+  userKey,
+  syncSecret
+) {
+  const cleanUserKey =
+    normalizeUserKey(userKey);
+
+  const cleanSecret =
+    String(syncSecret || "").trim();
+
+  if (!cleanUserKey) {
+    throw new Error(
+      "Aktiv INTZ-profil mangler."
+    );
+  }
+
+  if (cleanUserKey === "default") {
+    throw new Error(
+      "Opprett en personlig INTZ-profil før skysynk brukes."
+    );
+  }
+
+  if (cleanSecret.length < 12) {
+    throw new Error(
+      "Synknøkkelen må inneholde minst 12 tegn."
+    );
+  }
+
+  return {
+    userKey: cleanUserKey,
+    syncSecret: cleanSecret
+  };
+}
+
+async function callRpc(
+  functionName,
+  parameters
+) {
+  const { data, error } =
+    await supabase.rpc(
+      functionName,
+      parameters
+    );
 
   if (error) {
     throw error;
   }
 
-  return user || null;
+  return data;
 }
 
-async function requireAuthUser() {
-  const user = await getAuthUser();
-
-  if (!user) {
-    throw new Error(
-      "Du må logge inn med e-post under Innstillinger før synkronisering."
+async function registerOrVerify(
+  userKey,
+  syncSecret
+) {
+  const credentials =
+    validateCredentials(
+      userKey,
+      syncSecret
     );
-  }
 
-  return user;
-}
+  const data = await callRpc(
+    "intz_register_or_verify",
+    {
+      p_user_key:
+        credentials.userKey,
 
-async function sendMagicLink(email) {
-  const cleanEmail = String(email || "").trim();
+      p_sync_secret:
+        credentials.syncSecret
+    }
+  );
 
-  if (!cleanEmail) {
+  if (data !== true) {
     throw new Error(
-      "Skriv inn en gyldig e-postadresse."
+      "Supabase avviste bruker eller synknøkkel."
     );
-  }
-
-  const redirectTo =
-    location.origin +
-    location.pathname +
-    "#settings";
-
-  const { error } =
-    await supabase.auth.signInWithOtp({
-      email: cleanEmail,
-      options: {
-        emailRedirectTo: redirectTo
-      }
-    });
-
-  if (error) {
-    throw error;
   }
 
   return true;
 }
 
-async function signOut() {
-  const { error } =
-    await supabase.auth.signOut();
-
-  if (error) {
-    throw error;
-  }
-}
-
-function createWorkoutRow(userId, workout) {
+function workoutRow(workout) {
   return {
-    user_id: userId,
-    local_id: workout._local_id,
-    name: workout.name || "Økt",
-    description: workout.desc || "",
-    payload: workout,
+    local_id:
+      workout._local_id,
+
+    name:
+      workout.name || "Økt",
+
+    description:
+      workout.desc || "",
+
+    payload:
+      workout,
+
     schema_version:
-      Number(workout._schema_version || 1),
+      Number(
+        workout._schema_version || 1
+      ),
+
     client_updated_at:
       workout._updated_at,
+
     deleted_at:
       workout._deleted_at || null
   };
 }
 
-function createSessionRow(userId, session) {
+function sessionRow(session) {
   return {
-    user_id: userId,
-    local_id: session._local_id,
-    name: session.name || "Økt",
+    local_id:
+      session._local_id,
+
+    name:
+      session.name || "Økt",
+
     started_at:
       session.startedAt || null,
+
     ended_at:
       session.endedAt || null,
-    payload: session,
+
+    payload:
+      session,
+
     schema_version:
-      Number(session._schema_version || 1),
+      Number(
+        session._schema_version || 1
+      ),
+
     client_updated_at:
       session._updated_at,
+
     deleted_at:
       session._deleted_at || null
   };
 }
 
-async function upsertWorkouts(workouts) {
+async function upsertWorkouts(
+  userKey,
+  syncSecret,
+  workouts
+) {
+  const credentials =
+    validateCredentials(
+      userKey,
+      syncSecret
+    );
+
   if (!Array.isArray(workouts)) {
     throw new Error(
-      "Maler må sendes som en liste."
+      "Øktmaler må sendes som en liste."
     );
   }
 
@@ -133,32 +192,39 @@ async function upsertWorkouts(workouts) {
     return [];
   }
 
-  const user = await requireAuthUser();
+  const data = await callRpc(
+    "intz_upsert_workouts",
+    {
+      p_user_key:
+        credentials.userKey,
 
-  const rows = workouts.map(workout =>
-    createWorkoutRow(user.id, workout)
+      p_sync_secret:
+        credentials.syncSecret,
+
+      p_items:
+        workouts.map(workoutRow)
+    }
   );
 
-  const { data, error } = await supabase
-    .from("intz_workouts")
-    .upsert(rows, {
-      onConflict: "user_id,local_id"
-    })
-    .select(
-      "id, local_id, client_updated_at, deleted_at"
-    );
-
-  if (error) {
-    throw error;
-  }
-
-  return data || [];
+  return Array.isArray(data)
+    ? data
+    : [];
 }
 
-async function upsertSessions(sessions) {
+async function upsertSessions(
+  userKey,
+  syncSecret,
+  sessions
+) {
+  const credentials =
+    validateCredentials(
+      userKey,
+      syncSecret
+    );
+
   if (!Array.isArray(sessions)) {
     throw new Error(
-      "Økter må sendes som en liste."
+      "Treningsøkter må sendes som en liste."
     );
   }
 
@@ -166,108 +232,82 @@ async function upsertSessions(sessions) {
     return [];
   }
 
-  const user = await requireAuthUser();
+  const data = await callRpc(
+    "intz_upsert_sessions",
+    {
+      p_user_key:
+        credentials.userKey,
 
-  const rows = sessions.map(session =>
-    createSessionRow(user.id, session)
+      p_sync_secret:
+        credentials.syncSecret,
+
+      p_items:
+        sessions.map(sessionRow)
+    }
   );
 
-  const { data, error } = await supabase
-    .from("intz_sessions")
-    .upsert(rows, {
-      onConflict: "user_id,local_id"
-    })
-    .select(
-      "id, local_id, client_updated_at, deleted_at"
+  return Array.isArray(data)
+    ? data
+    : [];
+}
+
+async function listWorkouts(
+  userKey,
+  syncSecret
+) {
+  const credentials =
+    validateCredentials(
+      userKey,
+      syncSecret
     );
 
-  if (error) {
-    throw error;
-  }
+  const data = await callRpc(
+    "intz_list_workouts",
+    {
+      p_user_key:
+        credentials.userKey,
 
-  return data || [];
+      p_sync_secret:
+        credentials.syncSecret
+    }
+  );
+
+  return Array.isArray(data)
+    ? data
+    : [];
 }
 
-async function listWorkouts() {
-  const user = await requireAuthUser();
-
-  const { data, error } = await supabase
-    .from("intz_workouts")
-    .select(
-      [
-        "id",
-        "local_id",
-        "name",
-        "description",
-        "payload",
-        "schema_version",
-        "client_updated_at",
-        "deleted_at",
-        "server_updated_at"
-      ].join(",")
-    )
-    .eq("user_id", user.id)
-    .order("client_updated_at", {
-      ascending: true
-    });
-
-  if (error) {
-    throw error;
-  }
-
-  return data || [];
-}
-
-async function listSessions() {
-  const user = await requireAuthUser();
-
-  const { data, error } = await supabase
-    .from("intz_sessions")
-    .select(
-      [
-        "id",
-        "local_id",
-        "name",
-        "started_at",
-        "ended_at",
-        "payload",
-        "schema_version",
-        "client_updated_at",
-        "deleted_at",
-        "server_updated_at"
-      ].join(",")
-    )
-    .eq("user_id", user.id)
-    .order("client_updated_at", {
-      ascending: true
-    });
-
-  if (error) {
-    throw error;
-  }
-
-  return data || [];
-}
-
-supabase.auth.onAuthStateChange(
-  (event, session) => {
-    window.dispatchEvent(
-      new CustomEvent("intz:authchange", {
-        detail: {
-          event,
-          user: session?.user || null
-        }
-      })
+async function listSessions(
+  userKey,
+  syncSecret
+) {
+  const credentials =
+    validateCredentials(
+      userKey,
+      syncSecret
     );
-  }
-);
+
+  const data = await callRpc(
+    "intz_list_sessions",
+    {
+      p_user_key:
+        credentials.userKey,
+
+      p_sync_secret:
+        credentials.syncSecret
+    }
+  );
+
+  return Array.isArray(data)
+    ? data
+    : [];
+}
 
 window.INTZSupabase = {
   supabase,
-  getAuthUser,
-  requireAuthUser,
-  sendMagicLink,
-  signOut,
+  normalizeUserKey,
+  validateCredentials,
+  registerOrVerify,
   upsertWorkouts,
   upsertSessions,
   listWorkouts,

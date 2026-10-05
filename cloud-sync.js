@@ -1,10 +1,15 @@
 // cloud-sync.js
-// INTZ v10.1 – Offline-first toveis synkronisering
+// INTZ v10.1 – Offline-first toveis synkronisering.
+//
+// Aktiv INTZ-profil = skylagringens user_key.
+// Synknøkkel lagres lokalt for aktiv profil.
+// Konfliktregel: nyeste _updated_at vinner.
 
 function activeUser() {
   return (
-    localStorage.getItem("active_user") ||
-    "default"
+    localStorage.getItem(
+      "active_user"
+    ) || "default"
   );
 }
 
@@ -15,7 +20,9 @@ function nsKey(key) {
 function getNS(key, fallback) {
   try {
     const current =
-      localStorage.getItem(nsKey(key));
+      localStorage.getItem(
+        nsKey(key)
+      );
 
     if (current != null) {
       return JSON.parse(current);
@@ -45,43 +52,39 @@ function setNS(key, value) {
   );
 }
 
-function removeMetadata(value) {
-  if (Array.isArray(value)) {
-    return value.map(removeMetadata);
+function currentCredentials() {
+  const userKey =
+    String(activeUser() || "")
+      .trim()
+      .toLowerCase();
+
+  const syncSecret =
+    String(
+      getNS("cloudSyncSecret", "")
+    ).trim();
+
+  if (!userKey) {
+    throw new Error(
+      "Aktiv INTZ-profil mangler."
+    );
   }
 
-  if (
-    value &&
-    typeof value === "object"
-  ) {
-    const result = {};
-
-    for (
-      const [key, child] of
-      Object.entries(value)
-    ) {
-      if (
-        key === "_cloud_id" ||
-        key === "_sync_status" ||
-        key === "_sync_hash" ||
-        key === "_cloud_synced_at"
-      ) {
-        continue;
-      }
-
-      result[key] = removeMetadata(child);
-    }
-
-    return result;
+  if (userKey === "default") {
+    throw new Error(
+      "Opprett en personlig INTZ-profil før skysynk brukes."
+    );
   }
 
-  return value;
-}
+  if (syncSecret.length < 12) {
+    throw new Error(
+      "Angi og lagre en synknøkkel på minst 12 tegn."
+    );
+  }
 
-function contentHash(item) {
-  const content = removeMetadata(item);
-
-  return JSON.stringify(content);
+  return {
+    userKey,
+    syncSecret
+  };
 }
 
 function createUuid(prefix = "intz") {
@@ -105,18 +108,64 @@ function createUuid(prefix = "intz") {
 }
 
 function parseTime(value) {
-  const parsed = Date.parse(value || "");
+  const parsed =
+    Date.parse(value || "");
 
   return Number.isFinite(parsed)
     ? parsed
     : 0;
 }
 
-function ensureMetadata(item, prefix) {
-  const now = new Date().toISOString();
+function stableCopy(value) {
+  if (Array.isArray(value)) {
+    return value.map(stableCopy);
+  }
+
+  if (
+    value &&
+    typeof value === "object"
+  ) {
+    const result = {};
+
+    const keys =
+      Object.keys(value).sort();
+
+    for (const key of keys) {
+      if (
+        key === "_cloud_id" ||
+        key === "_cloud_synced_at" ||
+        key === "_sync_status" ||
+        key === "_sync_hash" ||
+        key === "_updated_at"
+      ) {
+        continue;
+      }
+
+      result[key] =
+        stableCopy(value[key]);
+    }
+
+    return result;
+  }
+
+  return value;
+}
+
+function contentHash(item) {
+  return JSON.stringify(
+    stableCopy(item)
+  );
+}
+
+function ensureMetadata(
+  item,
+  prefix
+) {
+  const now =
+    new Date().toISOString();
 
   const normalized = {
-    ...item,
+    ...(item || {}),
 
     _local_id:
       item?._local_id ||
@@ -124,7 +173,9 @@ function ensureMetadata(item, prefix) {
       createUuid(prefix),
 
     _schema_version:
-      Number(item?._schema_version || 1),
+      Number(
+        item?._schema_version || 1
+      ),
 
     _updated_at:
       item?._updated_at || now,
@@ -133,17 +184,21 @@ function ensureMetadata(item, prefix) {
       item?._deleted_at || null,
 
     _sync_status:
-      item?._sync_status || "pending"
+      item?._sync_status ||
+      "pending"
   };
 
-  const newHash = contentHash(normalized);
+  const calculatedHash =
+    contentHash(normalized);
 
   if (
     normalized._sync_hash &&
-    normalized._sync_hash !== newHash
+    normalized._sync_hash !==
+      calculatedHash
   ) {
     normalized._updated_at = now;
-    normalized._sync_status = "pending";
+    normalized._sync_status =
+      "pending";
   }
 
   normalized._sync_hash =
@@ -156,7 +211,8 @@ function migrateCollection(
   storageKey,
   prefix
 ) {
-  const source = getNS(storageKey, []);
+  const source =
+    getNS(storageKey, []);
 
   if (!Array.isArray(source)) {
     setNS(storageKey, []);
@@ -165,42 +221,53 @@ function migrateCollection(
 
   let changed = false;
 
-  const migrated = source.map(item => {
-    const normalized =
-      ensureMetadata(item || {}, prefix);
+  const migrated =
+    source.map(item => {
+      const normalized =
+        ensureMetadata(
+          item || {},
+          prefix
+        );
 
-    if (
-      normalized._local_id !==
-        item?._local_id ||
-      normalized._schema_version !==
-        item?._schema_version ||
-      normalized._updated_at !==
-        item?._updated_at ||
-      normalized._sync_hash !==
-        item?._sync_hash
-    ) {
-      changed = true;
-    }
+      if (
+        normalized._local_id !==
+          item?._local_id ||
+        normalized._updated_at !==
+          item?._updated_at ||
+        normalized._sync_hash !==
+          item?._sync_hash ||
+        normalized._schema_version !==
+          item?._schema_version
+      ) {
+        changed = true;
+      }
 
-    return normalized;
-  });
+      return normalized;
+    });
 
   if (changed) {
-    setNS(storageKey, migrated);
+    setNS(
+      storageKey,
+      migrated
+    );
   }
 
   return migrated;
 }
 
 function knownKey(collectionName) {
-  return `cloud_known_${collectionName}`;
+  return (
+    "cloudKnown_" +
+    collectionName
+  );
 }
 
 function getKnownIds(collectionName) {
-  const value = getNS(
-    knownKey(collectionName),
-    []
-  );
+  const value =
+    getNS(
+      knownKey(collectionName),
+      []
+    );
 
   return Array.isArray(value)
     ? value
@@ -213,23 +280,29 @@ function setKnownIds(
 ) {
   setNS(
     knownKey(collectionName),
-    Array.from(new Set(ids))
+    Array.from(
+      new Set(ids)
+    )
   );
 }
 
-function deletionLedgerKey(
+function deletionKey(
   collectionName
 ) {
-  return `cloud_deleted_${collectionName}`;
+  return (
+    "cloudDeleted_" +
+    collectionName
+  );
 }
 
 function getDeletionLedger(
   collectionName
 ) {
-  const value = getNS(
-    deletionLedgerKey(collectionName),
-    []
-  );
+  const value =
+    getNS(
+      deletionKey(collectionName),
+      []
+    );
 
   return Array.isArray(value)
     ? value
@@ -241,7 +314,7 @@ function setDeletionLedger(
   items
 ) {
   setNS(
-    deletionLedgerKey(collectionName),
+    deletionKey(collectionName),
     items
   );
 }
@@ -250,44 +323,56 @@ function detectLocalDeletions(
   collectionName,
   localItems
 ) {
+  const currentIds =
+    new Set(
+      localItems
+        .map(item =>
+          item?._local_id
+        )
+        .filter(Boolean)
+    );
+
   const knownIds =
     getKnownIds(collectionName);
 
-  const localIds = new Set(
-    localItems
-      .map(item => item?._local_id)
-      .filter(Boolean)
-  );
-
   const ledger =
-    getDeletionLedger(collectionName);
+    getDeletionLedger(
+      collectionName
+    );
 
-  const ledgerIds = new Set(
-    ledger
-      .map(item => item?._local_id)
-      .filter(Boolean)
-  );
+  const ledgerIds =
+    new Set(
+      ledger
+        .map(item =>
+          item?._local_id
+        )
+        .filter(Boolean)
+    );
 
   const now =
     new Date().toISOString();
 
   for (const knownId of knownIds) {
     if (
-      localIds.has(knownId) ||
+      currentIds.has(knownId) ||
       ledgerIds.has(knownId)
     ) {
       continue;
     }
 
-    ledger.push({
+    const tombstone = {
       _local_id: knownId,
       _schema_version: 1,
       _updated_at: now,
       _deleted_at: now,
       _sync_status: "pending",
-      _sync_hash: "",
       name: "Slettet"
-    });
+    };
+
+    tombstone._sync_hash =
+      contentHash(tombstone);
+
+    ledger.push(tombstone);
   }
 
   setDeletionLedger(
@@ -298,14 +383,15 @@ function detectLocalDeletions(
   return ledger;
 }
 
-function pendingItems(items) {
+function itemsToUpload(items) {
   return items.filter(item => {
     if (!item?._local_id) {
       return false;
     }
 
     return (
-      item._sync_status !== "synced" ||
+      item._sync_status !==
+        "synced" ||
       !item._cloud_id
     );
   });
@@ -315,16 +401,21 @@ function markUploaded(
   items,
   uploadedRows
 ) {
-  const byLocalId = new Map(
-    (uploadedRows || []).map(row => [
-      row.local_id,
-      row
-    ])
-  );
+  const rowsByLocalId =
+    new Map(
+      (uploadedRows || []).map(
+        row => [
+          row.local_id,
+          row
+        ]
+      )
+    );
 
   return items.map(item => {
     const row =
-      byLocalId.get(item._local_id);
+      rowsByLocalId.get(
+        item._local_id
+      );
 
     if (!row) {
       return item;
@@ -332,10 +423,15 @@ function markUploaded(
 
     const updated = {
       ...item,
-      _cloud_id: row.id,
+
+      _cloud_id:
+        row.id,
+
       _cloud_synced_at:
         new Date().toISOString(),
-      _sync_status: "synced"
+
+      _sync_status:
+        "synced"
     };
 
     updated._sync_hash =
@@ -345,15 +441,17 @@ function markUploaded(
   });
 }
 
-function markErrors(
+function markUploadError(
   items,
   attemptedIds
 ) {
-  const idSet =
+  const ids =
     new Set(attemptedIds);
 
   return items.map(item => {
-    if (!idSet.has(item._local_id)) {
+    if (
+      !ids.has(item._local_id)
+    ) {
       return item;
     }
 
@@ -370,50 +468,54 @@ function normalizeCloudRow(
 ) {
   const payload =
     row?.payload &&
-    typeof row.payload === "object"
+    typeof row.payload ===
+      "object"
       ? row.payload
       : {};
 
-  const result = ensureMetadata(
-    {
-      ...payload,
+  const normalized =
+    ensureMetadata(
+      {
+        ...payload,
 
-      _cloud_id: row.id,
+        _cloud_id:
+          row.id,
 
-      _local_id:
-        row.local_id ||
-        payload._local_id ||
-        createUuid(prefix),
+        _local_id:
+          row.local_id ||
+          payload._local_id ||
+          createUuid(prefix),
 
-      _schema_version:
-        Number(
-          row.schema_version ||
-          payload._schema_version ||
-          1
-        ),
+        _schema_version:
+          Number(
+            row.schema_version ||
+            payload._schema_version ||
+            1
+          ),
 
-      _updated_at:
-        row.client_updated_at ||
-        payload._updated_at ||
-        new Date().toISOString(),
+        _updated_at:
+          row.client_updated_at ||
+          payload._updated_at ||
+          new Date().toISOString(),
 
-      _deleted_at:
-        row.deleted_at ||
-        payload._deleted_at ||
-        null,
+        _deleted_at:
+          row.deleted_at ||
+          payload._deleted_at ||
+          null,
 
-      _cloud_synced_at:
-        new Date().toISOString(),
+        _cloud_synced_at:
+          new Date().toISOString(),
 
-      _sync_status: "synced"
-    },
-    prefix
-  );
+        _sync_status:
+          "synced"
+      },
+      prefix
+    );
 
-  result._sync_hash =
-    contentHash(result);
+  normalized._sync_hash =
+    contentHash(normalized);
 
-  return result;
+  return normalized;
 }
 
 function mergeCollections(
@@ -423,16 +525,16 @@ function mergeCollections(
 ) {
   const merged = new Map();
 
-  for (const rawLocal of localItems) {
-    const local =
+  for (const localItem of localItems) {
+    const normalized =
       ensureMetadata(
-        rawLocal,
+        localItem,
         prefix
       );
 
     merged.set(
-      local._local_id,
-      local
+      normalized._local_id,
+      normalized
     );
   }
 
@@ -440,29 +542,35 @@ function mergeCollections(
   let replaced = 0;
   let deleted = 0;
 
-  for (const row of cloudRows || []) {
-    const cloud =
+  for (const row of cloudRows) {
+    const cloudItem =
       normalizeCloudRow(
         row,
         prefix
       );
 
-    const local =
-      merged.get(cloud._local_id);
+    const localItem =
+      merged.get(
+        cloudItem._local_id
+      );
 
     const cloudTime =
-      parseTime(cloud._updated_at);
+      parseTime(
+        cloudItem._updated_at
+      );
 
     const localTime =
-      parseTime(local?._updated_at);
+      parseTime(
+        localItem?._updated_at
+      );
 
-    if (cloud._deleted_at) {
+    if (cloudItem._deleted_at) {
       if (
-        !local ||
+        !localItem ||
         cloudTime >= localTime
       ) {
         merged.delete(
-          cloud._local_id
+          cloudItem._local_id
         );
 
         deleted++;
@@ -471,10 +579,10 @@ function mergeCollections(
       continue;
     }
 
-    if (!local) {
+    if (!localItem) {
       merged.set(
-        cloud._local_id,
-        cloud
+        cloudItem._local_id,
+        cloudItem
       );
 
       downloaded++;
@@ -483,8 +591,8 @@ function mergeCollections(
 
     if (cloudTime > localTime) {
       merged.set(
-        cloud._local_id,
-        cloud
+        cloudItem._local_id,
+        cloudItem
       );
 
       replaced++;
@@ -492,9 +600,11 @@ function mergeCollections(
   }
 
   return {
-    items: Array.from(
-      merged.values()
-    ),
+    items:
+      Array.from(
+        merged.values()
+      ),
+
     downloaded,
     replaced,
     deleted
@@ -508,19 +618,28 @@ async function ensureCloud() {
     );
   }
 
-  return (
-    window.INTZSupabase
-      .requireAuthUser()
-  );
+  const credentials =
+    currentCredentials();
+
+  await window.INTZSupabase
+    .registerOrVerify(
+      credentials.userKey,
+      credentials.syncSecret
+    );
+
+  return credentials;
 }
 
-async function syncCollectionUp({
+async function uploadCollection({
   collectionName,
   storageKey,
   prefix,
-  upsert
+  uploadFunction
 }) {
-  let items =
+  const credentials =
+    currentCredentials();
+
+  let localItems =
     migrateCollection(
       storageKey,
       prefix
@@ -529,14 +648,16 @@ async function syncCollectionUp({
   let deletionLedger =
     detectLocalDeletions(
       collectionName,
-      items
+      localItems
     );
 
   const changedItems =
-    pendingItems(items);
+    itemsToUpload(localItems);
 
   const changedDeletions =
-    pendingItems(deletionLedger);
+    itemsToUpload(
+      deletionLedger
+    );
 
   const attempted = [
     ...changedItems,
@@ -550,15 +671,24 @@ async function syncCollectionUp({
     };
   }
 
-  try {
-    const rows = await upsert(
-      attempted
+  const attemptedIds =
+    attempted.map(
+      item => item._local_id
     );
 
-    items = markUploaded(
-      items,
-      rows
-    );
+  try {
+    const rows =
+      await uploadFunction(
+        credentials.userKey,
+        credentials.syncSecret,
+        attempted
+      );
+
+    localItems =
+      markUploaded(
+        localItems,
+        rows
+      );
 
     deletionLedger =
       markUploaded(
@@ -566,27 +696,37 @@ async function syncCollectionUp({
         rows
       );
 
-    setNS(storageKey, items);
+    setNS(
+      storageKey,
+      localItems
+    );
 
     setDeletionLedger(
       collectionName,
       deletionLedger
     );
 
-    const knownIds = new Set(
-      getKnownIds(collectionName)
-    );
+    const knownIds =
+      new Set(
+        getKnownIds(
+          collectionName
+        )
+      );
 
-    for (const item of items) {
-      knownIds.add(item._local_id);
+    for (
+      const item of localItems
+    ) {
+      knownIds.add(
+        item._local_id
+      );
     }
 
     for (
-      const tombstone of
+      const item of
       deletionLedger
     ) {
       knownIds.add(
-        tombstone._local_id
+        item._local_id
       );
     }
 
@@ -598,27 +738,27 @@ async function syncCollectionUp({
     return {
       uploaded:
         changedItems.length,
+
       deleted:
         changedDeletions.length
     };
   } catch (error) {
-    const attemptedIds =
-      attempted.map(
-        item => item._local_id
+    localItems =
+      markUploadError(
+        localItems,
+        attemptedIds
       );
 
-    items = markErrors(
-      items,
-      attemptedIds
-    );
-
     deletionLedger =
-      markErrors(
+      markUploadError(
         deletionLedger,
         attemptedIds
       );
 
-    setNS(storageKey, items);
+    setNS(
+      storageKey,
+      localItems
+    );
 
     setDeletionLedger(
       collectionName,
@@ -633,24 +773,53 @@ async function syncUp() {
   await ensureCloud();
 
   const workoutResult =
-    await syncCollectionUp({
-      collectionName: "workouts",
+    await uploadCollection({
+      collectionName:
+        "workouts",
+
       storageKey:
         "custom_workouts_v2",
-      prefix: "workout",
-      upsert: items =>
-        window.INTZSupabase
-          .upsertWorkouts(items)
+
+      prefix:
+        "workout",
+
+      uploadFunction:
+        (
+          userKey,
+          syncSecret,
+          items
+        ) =>
+          window.INTZSupabase
+            .upsertWorkouts(
+              userKey,
+              syncSecret,
+              items
+            )
     });
 
   const sessionResult =
-    await syncCollectionUp({
-      collectionName: "sessions",
-      storageKey: "sessions",
-      prefix: "session",
-      upsert: items =>
-        window.INTZSupabase
-          .upsertSessions(items)
+    await uploadCollection({
+      collectionName:
+        "sessions",
+
+      storageKey:
+        "sessions",
+
+      prefix:
+        "session",
+
+      uploadFunction:
+        (
+          userKey,
+          syncSecret,
+          items
+        ) =>
+          window.INTZSupabase
+            .upsertSessions(
+              userKey,
+              syncSecret,
+              items
+            )
     });
 
   return {
@@ -669,7 +838,8 @@ async function syncUp() {
 }
 
 async function syncDown() {
-  await ensureCloud();
+  const credentials =
+    await ensureCloud();
 
   const localWorkouts =
     migrateCollection(
@@ -685,11 +855,17 @@ async function syncDown() {
 
   const cloudWorkouts =
     await window.INTZSupabase
-      .listWorkouts();
+      .listWorkouts(
+        credentials.userKey,
+        credentials.syncSecret
+      );
 
   const cloudSessions =
     await window.INTZSupabase
-      .listSessions();
+      .listSessions(
+        credentials.userKey,
+        credentials.syncSecret
+      );
 
   const workoutMerge =
     mergeCollections(
@@ -736,6 +912,7 @@ async function syncDown() {
         detail: {
           workouts:
             workoutMerge,
+
           sessions:
             sessionMerge
         }
@@ -765,33 +942,64 @@ async function syncDown() {
 }
 
 async function syncAll() {
-  const uploaded =
+  const uploadResult =
     await syncUp();
 
-  const downloaded =
+  const downloadResult =
     await syncDown();
 
   return {
-    ...uploaded,
-    ...downloaded
+    ...uploadResult,
+    ...downloadResult
   };
 }
 
-function touch(item, prefix = "item") {
-  const updated = ensureMetadata(
-    {
-      ...item,
-      _updated_at:
-        new Date().toISOString(),
-      _sync_status: "pending"
-    },
-    prefix
-  );
+function touch(
+  item,
+  prefix = "item"
+) {
+  const updated =
+    ensureMetadata(
+      {
+        ...item,
+
+        _updated_at:
+          new Date().toISOString(),
+
+        _sync_status:
+          "pending"
+      },
+      prefix
+    );
 
   updated._sync_hash =
     contentHash(updated);
 
   return updated;
+}
+
+function softDelete(
+  item,
+  prefix = "item"
+) {
+  const now =
+    new Date().toISOString();
+
+  const deleted =
+    ensureMetadata(
+      {
+        ...item,
+        _updated_at: now,
+        _deleted_at: now,
+        _sync_status: "pending"
+      },
+      prefix
+    );
+
+  deleted._sync_hash =
+    contentHash(deleted);
+
+  return deleted;
 }
 
 function visible(items) {
@@ -806,7 +1014,7 @@ window.INTZCloud = {
   syncDown,
   syncAll,
   touch,
+  softDelete,
   visible,
   migrateCollection
 };
-``

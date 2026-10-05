@@ -1,10 +1,10 @@
 // service-worker.js
-// INTZ v10.1 – SPA cache med oppdatert synkronisering
+// INTZ v10.1 – Oppdatert SPA-cache.
 
 const CACHE =
-  "intervall-cache-v101-sync-v2";
+  "intervall-cache-v101-sync-v3";
 
-const ASSETS = [
+const APP_ASSETS = [
   "./",
   "./index.html",
   "./style.css",
@@ -29,7 +29,7 @@ self.addEventListener(
       caches
         .open(CACHE)
         .then(cache =>
-          cache.addAll(ASSETS)
+          cache.addAll(APP_ASSETS)
         )
     );
   }
@@ -40,17 +40,18 @@ self.addEventListener(
   event => {
     event.waitUntil(
       (async () => {
-        const keys =
+        const cacheNames =
           await caches.keys();
 
         await Promise.all(
-          keys
+          cacheNames
             .filter(
-              key => key !== CACHE
+              name =>
+                name !== CACHE
             )
             .map(
-              key =>
-                caches.delete(key)
+              name =>
+                caches.delete(name)
             )
         );
 
@@ -63,7 +64,8 @@ self.addEventListener(
 self.addEventListener(
   "fetch",
   event => {
-    const request = event.request;
+    const request =
+      event.request;
 
     if (
       request.method !== "GET"
@@ -71,26 +73,68 @@ self.addEventListener(
       return;
     }
 
+    const url =
+      new URL(request.url);
+
+    const sameOrigin =
+      url.origin ===
+      self.location.origin;
+
+    if (sameOrigin) {
+      event.respondWith(
+        (async () => {
+          try {
+            const response =
+              await fetch(request);
+
+            if (
+              response &&
+              response.ok
+            ) {
+              const cache =
+                await caches.open(
+                  CACHE
+                );
+
+              cache.put(
+                request,
+                response.clone()
+              );
+            }
+
+            return response;
+          } catch {
+            const cached =
+              await caches.match(
+                request
+              );
+
+            if (cached) {
+              return cached;
+            }
+
+            throw new Error(
+              "Ressursen er ikke tilgjengelig offline."
+            );
+          }
+        })()
+      );
+
+      return;
+    }
+
     event.respondWith(
       (async () => {
         const cached =
-          await caches.match(request);
+          await caches.match(
+            request
+          );
 
         if (cached) {
           return cached;
         }
 
-        try {
-          return await fetch(request);
-        } catch (error) {
-          console.warn(
-            "[INTZ SW] Nettverksforespørsel feilet:",
-            request.url,
-            error
-          );
-
-          throw error;
-        }
+        return fetch(request);
       })()
     );
   }

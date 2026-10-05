@@ -1,5 +1,5 @@
 // settings-view.js
-// INTZ v10.1 – Supabase innlogging og synkronisering
+// INTZ v10.1 – Supabase-konfigurasjon uten separat innlogging.
 
 function activeUser() {
   return (
@@ -44,49 +44,86 @@ function setNS(key, value) {
 
 let cloudWired = false;
 
-function createAuthUi() {
+function generateSyncSecret() {
+  if (
+    window.crypto &&
+    typeof window.crypto.randomUUID ===
+      "function"
+  ) {
+    return (
+      window.crypto.randomUUID() +
+      "-" +
+      window.crypto.randomUUID()
+    );
+  }
+
+  return (
+    Date.now().toString(36) +
+    "-" +
+    Math.random()
+      .toString(36)
+      .slice(2) +
+    "-" +
+    Math.random()
+      .toString(36)
+      .slice(2)
+  );
+}
+
+function createCloudIdentityUi() {
   const cloudStatus =
     document.getElementById(
       "cloud-status"
     );
 
   if (!cloudStatus) {
-    return null;
+    return;
   }
 
   const card =
     cloudStatus.closest(".card");
 
   if (!card) {
-    return null;
+    return;
   }
 
-  let authContainer =
+  if (
     document.getElementById(
-      "cloud-auth"
-    );
-
-  if (authContainer) {
-    return authContainer;
+      "cloud-identity"
+    )
+  ) {
+    return;
   }
 
-  authContainer =
+  const container =
     document.createElement("div");
 
-  authContainer.id =
-    "cloud-auth";
+  container.id =
+    "cloud-identity";
 
-  authContainer.style.marginBottom =
-    "12px";
+  container.style.margin =
+    "10px 0";
 
-  authContainer.innerHTML = `
-    <label style="display:grid;gap:4px">
-      <span>E-post for synkronisering</span>
+  container.innerHTML = `
+    <div class="small">
+      Aktiv skyprofil:
+      <strong id="cloud-user-key"></strong>
+    </div>
+
+    <label
+      style="
+        display:grid;
+        gap:4px;
+        margin-top:8px
+      "
+    >
+      <span>Privat synknøkkel</span>
+
       <input
-        id="cloud-email"
-        type="email"
-        autocomplete="email"
-        placeholder="navn@eksempel.no"
+        id="cloud-sync-secret"
+        type="password"
+        autocomplete="off"
+        placeholder="Minst 12 tegn"
       />
     </label>
 
@@ -99,121 +136,79 @@ function createAuthUi() {
       "
     >
       <button
+        id="cloud-save-secret"
         class="secondary"
-        id="cloud-login"
         type="button"
       >
-        Send innloggingslenke
+        Lagre synknøkkel
       </button>
 
       <button
+        id="cloud-generate-secret"
         class="ghost"
-        id="cloud-logout"
         type="button"
       >
-        Logg ut
+        Generer ny nøkkel
+      </button>
+
+      <button
+        id="cloud-show-secret"
+        class="ghost"
+        type="button"
+      >
+        Vis nøkkel
       </button>
     </div>
 
-    <div
-      class="small"
-      id="cloud-user-status"
-      style="margin-top:8px"
-    >
-      Leser innloggingsstatus…
-    </div>
+    <p class="small">
+      Bruk samme aktive profil og samme
+      synknøkkel på enheter som skal dele
+      maler, treningsøkter og Ghost-data.
+      Oppbevar synknøkkelen privat.
+    </p>
   `;
-
-  const firstParagraph =
-    card.querySelector("p");
-
-  if (firstParagraph) {
-    firstParagraph.insertAdjacentElement(
-      "afterend",
-      authContainer
-    );
-  } else {
-    card.prepend(authContainer);
-  }
-
-  return authContainer;
-}
-
-async function updateAuthStatus() {
-  const status =
-    document.getElementById(
-      "cloud-user-status"
-    );
-
-  const logout =
-    document.getElementById(
-      "cloud-logout"
-    );
 
   const checkbox =
     document.getElementById(
       "cloud-enabled"
     );
 
-  if (
-    !status ||
-    !window.INTZSupabase
-  ) {
-    return;
-  }
+  const checkboxLabel =
+    checkbox?.closest("label");
 
-  try {
-    const user =
-      await window.INTZSupabase
-        .getAuthUser();
-
-    if (user) {
-      status.textContent =
-        "Innlogget som " +
-        (user.email || user.id);
-
-      if (logout) {
-        logout.disabled = false;
-      }
-    } else {
-      status.textContent =
-        "Ikke innlogget";
-
-      if (logout) {
-        logout.disabled = true;
-      }
-
-      if (checkbox) {
-        checkbox.checked = false;
-      }
-    }
-  } catch (error) {
-    status.textContent =
-      "Kunne ikke lese innloggingsstatus: " +
-      (error?.message ||
-        String(error));
+  if (checkboxLabel) {
+    checkboxLabel.insertAdjacentElement(
+      "beforebegin",
+      container
+    );
+  } else {
+    card.prepend(container);
   }
 }
 
-function formatSyncResult(result) {
+function formatUploadResult(result) {
   return [
-    `Maler opp: ${
+    `Maler lastet opp: ${
       result.workouts_uploaded || 0
     }`,
 
-    `Maler slettet: ${
+    `Slettede maler: ${
       result.workouts_deleted || 0
     }`,
 
-    `Økter opp: ${
+    `Økter lastet opp: ${
       result.sessions_uploaded || 0
     }`,
 
-    `Økter slettet: ${
+    `Slettede økter: ${
       result.sessions_deleted || 0
-    }`,
+    }`
+  ].join(" · ");
+}
 
-    `Nye maler ned: ${
+function formatDownloadResult(result) {
+  return [
+    `Nye maler: ${
       result.workouts_downloaded || 0
     }`,
 
@@ -221,18 +216,26 @@ function formatSyncResult(result) {
       result.workouts_replaced || 0
     }`,
 
-    `Nye økter ned: ${
+    `Slettede maler: ${
+      result.workouts_deleted || 0
+    }`,
+
+    `Nye økter: ${
       result.sessions_downloaded || 0
     }`,
 
     `Oppdaterte økter: ${
       result.sessions_replaced || 0
+    }`,
+
+    `Slettede økter: ${
+      result.sessions_deleted || 0
     }`
   ].join(" · ");
 }
 
 function wireCloud() {
-  createAuthUi();
+  createCloudIdentityUi();
 
   const checkbox =
     document.getElementById(
@@ -254,29 +257,56 @@ function wireCloud() {
       "cloud-status"
     );
 
-  const email =
+  const userKeyDisplay =
     document.getElementById(
-      "cloud-email"
+      "cloud-user-key"
     );
 
-  const login =
+  const secretInput =
     document.getElementById(
-      "cloud-login"
+      "cloud-sync-secret"
     );
 
-  const logout =
+  const saveSecretButton =
     document.getElementById(
-      "cloud-logout"
+      "cloud-save-secret"
+    );
+
+  const generateButton =
+    document.getElementById(
+      "cloud-generate-secret"
+    );
+
+  const showButton =
+    document.getElementById(
+      "cloud-show-secret"
     );
 
   if (
     !checkbox ||
     !upButton ||
     !downButton ||
-    !status
+    !status ||
+    !secretInput
   ) {
     return;
   }
+
+  const userKey =
+    String(activeUser() || "")
+      .trim()
+      .toLowerCase();
+
+  if (userKeyDisplay) {
+    userKeyDisplay.textContent =
+      userKey;
+  }
+
+  secretInput.value =
+    getNS(
+      "cloudSyncSecret",
+      ""
+    );
 
   checkbox.checked =
     !!getNS(
@@ -285,7 +315,6 @@ function wireCloud() {
     );
 
   if (cloudWired) {
-    updateAuthStatus();
     return;
   }
 
@@ -295,13 +324,97 @@ function wireCloud() {
     status.textContent = message;
   }
 
+  function saveSecret() {
+    const value =
+      String(
+        secretInput.value || ""
+      ).trim();
+
+    if (value.length < 12) {
+      throw new Error(
+        "Synknøkkelen må inneholde minst 12 tegn."
+      );
+    }
+
+    setNS(
+      "cloudSyncSecret",
+      value
+    );
+
+    return value;
+  }
+
+  saveSecretButton?.addEventListener(
+    "click",
+    () => {
+      try {
+        saveSecret();
+
+        setStatus(
+          "Synknøkkelen er lagret lokalt for aktiv profil."
+        );
+      } catch (error) {
+        setStatus(
+          error?.message ||
+          String(error)
+        );
+      }
+    }
+  );
+
+  generateButton?.addEventListener(
+    "click",
+    () => {
+      const generated =
+        generateSyncSecret();
+
+      secretInput.value =
+        generated;
+
+      setNS(
+        "cloudSyncSecret",
+        generated
+      );
+
+      setStatus(
+        "En ny synknøkkel er generert og lagret. Kopier nøkkelen til et sikkert sted."
+      );
+    }
+  );
+
+  showButton?.addEventListener(
+    "click",
+    () => {
+      const hidden =
+        secretInput.type ===
+        "password";
+
+      secretInput.type =
+        hidden
+          ? "text"
+          : "password";
+
+      showButton.textContent =
+        hidden
+          ? "Skjul nøkkel"
+          : "Vis nøkkel";
+    }
+  );
+
   checkbox.addEventListener(
     "change",
-    async () => {
+    () => {
       if (checkbox.checked) {
         try {
-          await window.INTZSupabase
-            .requireAuthUser();
+          if (
+            userKey === "default"
+          ) {
+            throw new Error(
+              "Opprett en personlig INTZ-profil før skysynk aktiveres."
+            );
+          }
+
+          saveSecret();
 
           setNS(
             "cloudEnabled",
@@ -317,10 +430,6 @@ function wireCloud() {
           setNS(
             "cloudEnabled",
             false
-          );
-
-          alert(
-            "Du må logge inn før sky-synk kan aktiveres."
           );
 
           setStatus(
@@ -341,80 +450,114 @@ function wireCloud() {
     }
   );
 
-  login?.addEventListener(
-    "click",
-    async () => {
-      try {
-        setStatus(
-          "Sender innloggingslenke…"
-        );
-
-        await window.INTZSupabase
-          .sendMagicLink(
-            email?.value
-          );
-
-        setStatus(
-          "Innloggingslenke er sendt. Åpne lenken i e-posten på denne enheten."
-        );
-      } catch (error) {
-        console.error(error);
-
-        setStatus(
-          "Innlogging feilet: " +
-          (
-            error?.message ||
-            String(error)
-          )
-        );
-      }
-    }
-  );
-
-  logout?.addEventListener(
-    "click",
-    async () => {
-      try {
-        await window.INTZSupabase
-          .signOut();
-
-        checkbox.checked = false;
-
-        setNS(
-          "cloudEnabled",
-          false
-        );
-
-        setStatus(
-          "Du er logget ut."
-        );
-
-        await updateAuthStatus();
-      } catch (error) {
-        setStatus(
-          "Utlogging feilet: " +
-          (
-            error?.message ||
-            String(error)
-          )
-        );
-      }
-    }
-  );
-
-  upButton.textContent =
-    "Synkroniser nå";
-
   upButton.addEventListener(
     "click",
     async () => {
       try {
         if (!checkbox.checked) {
-          alert(
+          throw new Error(
             "Aktiver sky-synk først."
           );
-
-          return;
         }
 
-  
+        saveSecret();
+
+        upButton.disabled = true;
+        downButton.disabled = true;
+
+        setStatus(
+          "Synkroniserer lokale endringer til Supabase..."
+        );
+
+        const result =
+          await window.INTZCloud
+            .syncUp();
+
+        setStatus(
+          "Synk opp fullført. " +
+          formatUploadResult(result)
+        );
+      } catch (error) {
+        console.error(error);
+
+        setStatus(
+          "Synk opp feilet: " +
+          (
+            error?.message ||
+            String(error)
+          )
+        );
+      } finally {
+        upButton.disabled = false;
+        downButton.disabled = false;
+      }
+    }
+  );
+
+  downButton.addEventListener(
+    "click",
+    async () => {
+      try {
+        if (!checkbox.checked) {
+          throw new Error(
+            "Aktiver sky-synk først."
+          );
+        }
+
+        saveSecret();
+
+        upButton.disabled = true;
+        downButton.disabled = true;
+
+        setStatus(
+          "Henter og slår sammen data fra Supabase..."
+        );
+
+        const result =
+          await window.INTZCloud
+            .syncDown();
+
+        setStatus(
+          "Synk ned fullført. " +
+          formatDownloadResult(result)
+        );
+      } catch (error) {
+        console.error(error);
+
+        setStatus(
+          "Synk ned feilet: " +
+          (
+            error?.message ||
+            String(error)
+          )
+        );
+      } finally {
+        upButton.disabled = false;
+        downButton.disabled = false;
+      }
+    }
+  );
+
+  setStatus(
+    checkbox.checked
+      ? "Sky-synk er aktivert."
+      : "Sky-synk er deaktivert."
+  );
+}
+
+window.addEventListener(
+  "intz:viewchange",
+  event => {
+    if (
+      event.detail?.view ===
+      "settings"
+    ) {
+      wireCloud();
+    }
+  }
+);
+
+document.addEventListener(
+  "DOMContentLoaded",
+  wireCloud
+);
