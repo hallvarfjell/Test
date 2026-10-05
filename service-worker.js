@@ -3,7 +3,7 @@
 // Oppdatert for dashboard/øktbygger FIX.
 
 const CACHE =
-  "intervall-cache-v101-builder-fix-v1";
+  "intervall-cache-v101-finish-session-v1";
 
 const APP_ASSETS = [
   "./",
