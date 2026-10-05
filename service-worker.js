@@ -1,8 +1,9 @@
 // service-worker.js
-// INTZ v10.1 – Oppdatert SPA-cache.
+// INTZ v10.1 – SPA-cache
+// Oppdatert for dashboard/øktbygger FIX.
 
 const CACHE =
-  "intervall-cache-v101-sync-v3";
+  "intervall-cache-v101-builder-fix-v1";
 
 const APP_ASSETS = [
   "./",
@@ -29,7 +30,9 @@ self.addEventListener(
       caches
         .open(CACHE)
         .then(cache =>
-          cache.addAll(APP_ASSETS)
+          cache.addAll(
+            APP_ASSETS
+          )
         )
     );
   }
@@ -40,18 +43,20 @@ self.addEventListener(
   event => {
     event.waitUntil(
       (async () => {
-        const cacheNames =
+        const names =
           await caches.keys();
 
         await Promise.all(
-          cacheNames
+          names
             .filter(
               name =>
                 name !== CACHE
             )
             .map(
               name =>
-                caches.delete(name)
+                caches.delete(
+                  name
+                )
             )
         );
 
@@ -76,11 +81,10 @@ self.addEventListener(
     const url =
       new URL(request.url);
 
-    const sameOrigin =
+    if (
       url.origin ===
-      self.location.origin;
-
-    if (sameOrigin) {
+      self.location.origin
+    ) {
       event.respondWith(
         (async () => {
           try {
@@ -96,14 +100,14 @@ self.addEventListener(
                   CACHE
                 );
 
-              cache.put(
+              await cache.put(
                 request,
                 response.clone()
               );
             }
 
             return response;
-          } catch {
+          } catch (error) {
             const cached =
               await caches.match(
                 request
@@ -113,9 +117,7 @@ self.addEventListener(
               return cached;
             }
 
-            throw new Error(
-              "Ressursen er ikke tilgjengelig offline."
-            );
+            throw error;
           }
         })()
       );
@@ -124,18 +126,13 @@ self.addEventListener(
     }
 
     event.respondWith(
-      (async () => {
-        const cached =
-          await caches.match(
-            request
-          );
-
-        if (cached) {
-          return cached;
-        }
-
-        return fetch(request);
-      })()
+      caches
+        .match(request)
+        .then(
+          cached =>
+            cached ||
+            fetch(request)
+        )
     );
   }
 );
