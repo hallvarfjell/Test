@@ -3,7 +3,7 @@
 // Oppdatert for dashboard/øktbygger FIX.
 
 const CACHE =
-  "intervall-cache-v101-navigation-guard-v1";
+  "intervall-cache-v101-dashboard-no-reset-v1";
 
 const APP_ASSETS = [
   "./",

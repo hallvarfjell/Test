@@ -907,16 +907,38 @@ function finishSession() {
  const lst = document.getElementById('st-last');
  if(!elp||!dst||!elv||!tss||!lst) return;
  let elapsed = 0, remaining = 0;
- if(STATE.workout){
- if(STATE.workout.startedAt && STATE.ticker){
- const now = Date.now();
- const start = new Date(STATE.workout.startedAt).getTime() || now;
- elapsed = Math.max(0, Math.round((now - start)/1000));
- } else {
- elapsed = 0;
- }
- remaining = computeRemainingSec(STATE.workout);
- }
+if (STATE.workout) {
+  /*
+   * Påløpt tid følger øktens faktiske starttid.
+   * Visningen skal ikke nullstilles fordi ticker-
+   * referansen mangler eller økten er pauset.
+   */
+  if (STATE.workout.startedAt) {
+    const now = Date.now();
+
+    const start =
+      new Date(
+        STATE.workout.startedAt
+      ).getTime();
+
+    elapsed =
+      Number.isFinite(start)
+        ? Math.max(
+            0,
+            Math.round(
+              (now - start) / 1000
+            )
+          )
+        : 0;
+  } else {
+    elapsed = 0;
+  }
+
+  remaining =
+    computeRemainingSec(
+      STATE.workout
+    );
+}
  elp.textContent = fmtMMSS(elapsed);
  rem.textContent = (remaining>0? fmtMMSS(remaining) : (STATE.workout? '00:00' : '--:--'));
  dst.textContent = (STATE.logger.dist/1000).toFixed(2)+ ' km';
