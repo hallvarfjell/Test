@@ -1,13 +1,8 @@
 // spa-router.js
-// INTZ v10.1 – SPA-router med oppdatering av øktvalg.
-//
-// Ruter:
-//   #dashboard
-//   #builder
-//   #log
-//   #settings
-//   #help
-//   #results:<sessionId>
+// INTZ v10.1 – SPA-router med:
+// - navigasjonssperre under aktiv økt
+// - dynamisk oppdatering av øktlisten
+// - behandling av forvalg fra øktbyggeren
 
 (function () {
   const VIEWS = [
@@ -18,6 +13,8 @@
     "settings",
     "help"
   ];
+
+  let revertingHash = false;
 
   function activeUser() {
     return (
@@ -57,7 +54,7 @@
         : fallback;
     } catch (error) {
       console.warn(
-        "[INTZ Router] Kunne ikke lese:",
+        "[INTZ Router] Kunne ikke lese lokal lagring:",
         key,
         error
       );
@@ -112,6 +109,25 @@
     };
   }
 
+  function navigationAllowed(
+    targetView
+  ) {
+    const guard =
+      window.INTZWorkoutNavigation;
+
+    if (
+      !guard ||
+      typeof guard.canNavigate !==
+        "function"
+    ) {
+      return true;
+    }
+
+    return guard.canNavigate(
+      targetView
+    );
+  }
+
   function show(view) {
     document
       .querySelectorAll(
@@ -159,7 +175,7 @@
     const workouts =
       loadWorkouts();
 
-    const oldValue =
+    const previousValue =
       select.value;
 
     select.innerHTML = "";
@@ -171,13 +187,11 @@
         );
 
       option.value = "";
+
       option.textContent =
         "Ingen lagrede økter";
 
-      select.appendChild(
-        option
-      );
-
+      select.appendChild(option);
       select.disabled = true;
 
       const duration =
@@ -215,21 +229,19 @@
       }
     );
 
-    const hasOldValue =
+    const previousExists =
       Array.from(
         select.options
       ).some(
         option =>
           option.value ===
-          oldValue
+          previousValue
       );
 
-    if (hasOldValue) {
-      select.value =
-        oldValue;
-    } else {
-      select.value = "c:0";
-    }
+    select.value =
+      previousExists
+        ? previousValue
+        : "c:0";
   }
 
   function applyPreselection() {
@@ -256,13 +268,9 @@
       preselect.type ===
         "custom"
     ) {
-      const index =
-        Number(
-          preselect.index
-        );
-
       const requestedValue =
-        "c:" + index;
+        "c:" +
+        Number(preselect.index);
 
       const exists =
         Array.from(
@@ -292,13 +300,6 @@
   }
 
   function refreshDashboard() {
-    /*
-     * main.js registrerer sin change-handler
-     * under DOMContentLoaded. Ved SPA-navigasjon
-     * er den allerede registrert, men setTimeout
-     * beskytter også første oppstart mot ulik
-     * registreringsrekkefølge.
-     */
     window.setTimeout(
       () => {
         populateWorkoutSelect();
@@ -321,10 +322,7 @@
     );
   }
 
-  function apply() {
-    const route =
-      parseHash();
-
+  function publishRoute(route) {
     window.INTZRoute =
       route;
 
@@ -347,20 +345,95 @@
     }
   }
 
+  function restoreDashboardHash() {
+    if (
+      location.hash ===
+      "#dashboard"
+    ) {
+      publishRoute({
+        view: "dashboard",
+        arg: null
+      });
+
+      return;
+    }
+
+    revertingHash = true;
+
+    history.replaceState(
+      null,
+      "",
+      "#dashboard"
+    );
+
+    publishRoute({
+      view: "dashboard",
+      arg: null
+    });
+
+    revertingHash = false;
+  }
+
+  function applyRoute() {
+    if (revertingHash) {
+      return;
+    }
+
+    const route =
+      parseHash();
+
+    if (
+      !navigationAllowed(
+        route.view
+      )
+    ) {
+      restoreDashboardHash();
+      return;
+    }
+
+    publishRoute(route);
+  }
+
   function go(
     view,
     arg = null
   ) {
-    if (arg != null) {
-      location.hash =
-        view + ":" + arg;
+    const requestedView =
+      VIEWS.includes(view)
+        ? view
+        : "dashboard";
+
+    if (
+      !navigationAllowed(
+        requestedView
+      )
+    ) {
+      return false;
+    }
+
+    const newHash =
+      arg != null
+        ? (
+            requestedView +
+            ":" +
+            arg
+          )
+        : requestedView;
+
+    if (
+      location.hash ===
+      "#" + newHash
+    ) {
+      applyRoute();
     } else {
       location.hash =
-        view;
+        newHash;
     }
+
+    return true;
   }
 
-  function wireNav() {
+  function wireNavigation() {
     document
       .querySelectorAll(
         "[data-nav]"
@@ -370,6 +443,7 @@
           "click",
           event => {
             event.preventDefault();
+            event.stopPropagation();
 
             const view =
               link.dataset.nav;
@@ -385,12 +459,13 @@
   window.INTZRouter = {
     go,
     parseHash,
-    refreshDashboard
+    refreshDashboard,
+    navigationAllowed
   };
 
   window.addEventListener(
     "hashchange",
-    apply
+    applyRoute
   );
 
   window.addEventListener(
@@ -408,8 +483,8 @@
   document.addEventListener(
     "DOMContentLoaded",
     () => {
-      wireNav();
-      apply();
+      wireNavigation();
+      applyRoute();
     }
   );
 })();

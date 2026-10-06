@@ -937,12 +937,44 @@ function finishSession() {
  }
  function init(){
  try{
- for(const a of (document.getElementById('topbar')?.querySelectorAll('a')||[]))
- a.addEventListener('click', (e)=>{
- if(STATE.workout && STATE.ticker && STATE.workout.phase!=='done'){
- e.preventDefault(); alert('Avslutt økta før du navigerer bort fra hovedsida.');
- }
- });
+/*
+ * Navigasjonskontroll for SPA-ruteren.
+ *
+ * En økt regnes som aktiv fra den er startet til den er
+ * lagret eller forkastet. Dette gjelder også dersom økten
+ * er pauset.
+ */
+window.INTZWorkoutNavigation = {
+  isActive() {
+    return !!(
+      STATE.workout &&
+      STATE.workout.startedAt &&
+      STATE.workout.phase !== "done"
+    );
+  },
+
+  canNavigate(targetView) {
+    const active = this.isActive();
+
+    /*
+     * Navigasjon til dashboardet er alltid tillatt.
+     * Navigasjon bort fra dashboardet blokkeres mens en
+     * påbegynt økt finnes.
+     */
+    if (
+      active &&
+      targetView !== "dashboard"
+    ) {
+      alert(
+        "Økta pågår. Stopp og lagre eller forkast økta før du navigerer bort fra hovedsida."
+      );
+
+      return false;
+    }
+
+    return true;
+  }
+};
  window.addEventListener('beforeunload', (e)=>{
  if(STATE.workout && STATE.ticker && STATE.workout.phase!=='done'){
  e.preventDefault(); e.returnValue='Økta pågår. Avslutt før du lukker/navigerer bort.';
