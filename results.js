@@ -1,13 +1,12 @@
 // results.js
-// INTZ v10.1 – Enkel resultatvisning for SPA.
+// INTZ v10.1 – Resultatvisning, TCX-eksport og JSON-eksport.
 
 let SESSION = null;
 
 function activeUser() {
   return (
-    localStorage.getItem(
-      "active_user"
-    ) || "default"
+    localStorage.getItem("active_user") ||
+    "default"
   );
 }
 
@@ -18,16 +17,28 @@ function nsKey(key) {
 function getNS(key, fallback) {
   try {
     const current =
-      localStorage.getItem(
-        nsKey(key)
-      );
+      localStorage.getItem(nsKey(key));
 
-    return current != null
-      ? JSON.parse(current)
+    if (current != null) {
+      return JSON.parse(current);
+    }
+
+    const legacy =
+      localStorage.getItem(key);
+
+    return legacy != null
+      ? JSON.parse(legacy)
       : fallback;
   } catch {
     return fallback;
   }
+}
+
+function setNS(key, value) {
+  localStorage.setItem(
+    nsKey(key),
+    JSON.stringify(value)
+  );
 }
 
 function currentRoute() {
@@ -45,7 +56,7 @@ function currentRoute() {
   );
 }
 
-function getVisibleSessions() {
+function visibleSessions() {
   const sessions =
     getNS("sessions", []);
 
@@ -55,7 +66,8 @@ function getVisibleSessions() {
 
   return sessions.filter(
     session =>
-      !session?._deleted_at
+      session &&
+      !session._deleted_at
   );
 }
 
@@ -67,7 +79,6 @@ function pickSession() {
     route.arg
       ? route.arg
       : (
-          location.hash &&
           location.hash.startsWith(
             "#results:"
           )
@@ -76,7 +87,7 @@ function pickSession() {
         );
 
   const sessions =
-    getVisibleSessions();
+    visibleSessions();
 
   if (!sessions.length) {
     return null;
@@ -109,18 +120,25 @@ function formatMMSS(seconds) {
   const minutes =
     Math.floor(total / 60);
 
-  const remainder =
-    total % 60;
-
   return (
     minutes +
     ":" +
-    String(remainder)
+    String(total % 60)
       .padStart(2, "0")
   );
 }
 
-function calculateSummary(session) {
+function average(values) {
+  return values.length
+    ? values.reduce(
+        (sum, value) =>
+          sum + value,
+        0
+      ) / values.length
+    : null;
+}
+
+function computeSummary(session) {
   const points =
     Array.isArray(session.points)
       ? session.points
@@ -132,29 +150,11 @@ function calculateSummary(session) {
       ? Math.max(
           0,
           (
-            new Date(
-              session.endedAt
-            ) -
-            new Date(
-              session.startedAt
-            )
+            new Date(session.endedAt) -
+            new Date(session.startedAt)
           ) / 1000
         )
-      : (
-          points.length > 1
-            ? Math.max(
-                0,
-                (
-                  Number(
-                    points[
-                      points.length - 1
-                    ].ts
-                  ) -
-                  Number(points[0].ts)
-                ) / 1000
-              )
-            : 0
-        );
+      : 0;
 
   const heartRates =
     points
@@ -171,48 +171,33 @@ function calculateSummary(session) {
       .map(point =>
         Number(point.watt)
       )
-      .filter(value =>
-        Number.isFinite(value)
-      );
+      .filter(Number.isFinite);
 
   const lastPoint =
     points.length
-      ? points[
-          points.length - 1
-        ]
+      ? points[points.length - 1]
       : null;
 
-  const distanceKm =
-    lastPoint &&
-    Number.isFinite(
-      Number(lastPoint.dist_m)
-    )
-      ? Number(lastPoint.dist_m) /
-        1000
-      : 0;
-
-  const average = values =>
-    values.length
-      ? values.reduce(
-          (sum, value) =>
-            sum + value,
-          0
-        ) / values.length
-      : null;
+  const distanceMetres =
+    Number(lastPoint?.dist_m);
 
   return {
     points,
     duration,
-    distanceKm,
+
+    distanceKm:
+      Number.isFinite(
+        distanceMetres
+      )
+        ? distanceMetres / 1000
+        : 0,
 
     averageHr:
       average(heartRates),
 
-    maxHr:
+    maximumHr:
       heartRates.length
-        ? Math.max(
-            ...heartRates
-          )
+        ? Math.max(...heartRates)
         : null,
 
     averageWatt:
@@ -231,16 +216,7 @@ function renderSummary(session) {
   }
 
   const summary =
-    calculateSummary(session);
-
-  const syncStatus =
-    session._sync_status ===
-      "synced"
-      ? "Synkronisert"
-      : session._sync_status ===
-          "error"
-        ? "Synkroniseringsfeil"
-        : "Lagret lokalt";
+    computeSummary(session);
 
   target.innerHTML = `
     <div>
@@ -251,9 +227,7 @@ function renderSummary(session) {
 
     <div>
       Varighet:
-      ${formatMMSS(
-        summary.duration
-      )}
+      ${formatMMSS(summary.duration)}
     </div>
 
     <div>
@@ -276,9 +250,9 @@ function renderSummary(session) {
     <div>
       Makspuls:
       ${
-        summary.maxHr != null
+        summary.maximumHr != null
           ? Math.round(
-              summary.maxHr
+              summary.maximumHr
             ) + " bpm"
           : "–"
       }
@@ -299,38 +273,397 @@ function renderSummary(session) {
       Datapunkter:
       ${summary.points.length}
     </div>
-
-    <div>
-      Skylagring:
-      ${syncStatus}
-    </div>
   `;
 }
 
-function resizeCanvas(canvas) {
-  const rectangle =
-    canvas.getBoundingClientRect();
+function xmlEscape(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
 
-  const ratio =
-    window.devicePixelRatio || 1;
+function pointTimestamp(
+  point,
+  fallback
+) {
+  if (
+    point?.iso &&
+    !Number.isNaN(
+      Date.parse(point.iso)
+    )
+  ) {
+    return new Date(
+      point.iso
+    ).toISOString();
+  }
 
-  canvas.width =
+  const timestamp =
+    Number(point?.ts);
+
+  if (
+    Number.isFinite(timestamp)
+  ) {
+    return new Date(
+      timestamp
+    ).toISOString();
+  }
+
+  return fallback;
+}
+
+function buildTCX(session) {
+  const points =
+    Array.isArray(session.points)
+      ? session.points
+      : [];
+
+  if (!points.length) {
+    throw new Error(
+      "Økten inneholder ingen datapunkter."
+    );
+  }
+
+  const summary =
+    computeSummary(session);
+
+  const startTime =
+    session.startedAt &&
+    !Number.isNaN(
+      Date.parse(session.startedAt)
+    )
+      ? new Date(
+          session.startedAt
+        ).toISOString()
+      : pointTimestamp(
+          points[0],
+          new Date().toISOString()
+        );
+
+  const totalDistanceMetres =
     Math.max(
-      1,
-      Math.floor(
-        rectangle.width * ratio
+      0,
+      Math.round(
+        summary.distanceKm * 1000
       )
     );
 
-  canvas.height =
-    Math.max(
-      1,
-      Math.floor(
-        rectangle.height * ratio
-      )
+  const averageHr =
+    summary.averageHr != null
+      ? Math.round(
+          summary.averageHr
+        )
+      : 0;
+
+  const maximumHr =
+    summary.maximumHr != null
+      ? Math.round(
+          summary.maximumHr
+        )
+      : 0;
+
+  const trackpoints =
+    points.map(point => {
+      const time =
+        pointTimestamp(
+          point,
+          startTime
+        );
+
+      const distance =
+        Math.max(
+          0,
+          Number(point.dist_m) || 0
+        );
+
+      const heartRate =
+        Math.max(
+          0,
+          Math.round(
+            Number(point.hr) || 0
+          )
+        );
+
+      const speed =
+        Math.max(
+          0,
+          Number(point.speed_ms) || 0
+        );
+
+      const watt =
+        Math.max(
+          0,
+          Math.round(
+            Number(point.watt) || 0
+          )
+        );
+
+      return `
+        <Trackpoint>
+          <Time>${time}</Time>
+          <DistanceMeters>${distance.toFixed(2)}</DistanceMeters>
+          ${
+            heartRate > 0
+              ? `
+          <HeartRateBpm>
+            <Value>${heartRate}</Value>
+          </HeartRateBpm>`
+              : ""
+          }
+          <Extensions>
+            <ns3:TPX>
+              <ns3:Speed>${speed.toFixed(3)}</ns3:Speed>
+              <ns3:Watts>${watt}</ns3:Watts>
+            </ns3:TPX>
+          </Extensions>
+        </Trackpoint>
+      `;
+    }).join("");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<TrainingCenterDatabase
+  xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:ns3="http://www.garmin.com/xmlschemas/ActivityExtension/v2"
+  xsi:schemaLocation="
+    http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2
+    http://www.garmin.com/xmlschemas/TrainingCenterDatabasev2.xsd
+  "
+>
+  <Activities>
+    <Activity Sport="Running">
+      <Id>${startTime}</Id>
+
+      <Lap StartTime="${startTime}">
+        <TotalTimeSeconds>${Math.round(summary.duration)}</TotalTimeSeconds>
+        <DistanceMeters>${totalDistanceMetres}</DistanceMeters>
+        <Calories>0</Calories>
+
+        ${
+          averageHr > 0
+            ? `
+        <AverageHeartRateBpm>
+          <Value>${averageHr}</Value>
+        </AverageHeartRateBpm>`
+            : ""
+        }
+
+        ${
+          maximumHr > 0
+            ? `
+        <MaximumHeartRateBpm>
+          <Value>${maximumHr}</Value>
+        </MaximumHeartRateBpm>`
+            : ""
+        }
+
+        <Intensity>Active</Intensity>
+        <TriggerMethod>Manual</TriggerMethod>
+
+        <Track>
+          ${trackpoints}
+        </Track>
+      </Lap>
+
+      <Notes>${xmlEscape(session.notes || "")}</Notes>
+    </Activity>
+  </Activities>
+</TrainingCenterDatabase>`;
+}
+
+function safeFileName(value) {
+  return String(value || "intz-okt")
+    .trim()
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "-")
+    .replace(/\s+/g, "-")
+    .slice(0, 80) ||
+    "intz-okt";
+}
+
+function downloadBlob(
+  fileName,
+  content,
+  contentType
+) {
+  const blob =
+    new Blob(
+      [content],
+      {
+        type: contentType
+      }
     );
 
-  return ratio;
+  const url =
+    URL.createObjectURL(blob);
+
+  const anchor =
+    document.createElement("a");
+
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.style.display = "none";
+
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+
+  window.setTimeout(
+    () => {
+      URL.revokeObjectURL(url);
+    },
+    1500
+  );
+}
+
+function saveNotes() {
+  if (!SESSION) {
+    return;
+  }
+
+  const notes =
+    document.getElementById(
+      "notes"
+    );
+
+  if (!notes) {
+    return;
+  }
+
+  const sessions =
+    getNS("sessions", []);
+
+  const index =
+    sessions.findIndex(
+      session => {
+        if (
+          SESSION._local_id &&
+          session._local_id
+        ) {
+          return (
+            session._local_id ===
+            SESSION._local_id
+          );
+        }
+
+        return (
+          session.id === SESSION.id
+        );
+      }
+    );
+
+  if (index < 0) {
+    alert(
+      "Fant ikke økten i lokal lagring."
+    );
+
+    return;
+  }
+
+  sessions[index] = {
+    ...sessions[index],
+    notes: notes.value || "",
+    _updated_at:
+      new Date().toISOString(),
+    _sync_status: "pending"
+  };
+
+  SESSION = sessions[index];
+
+  setNS("sessions", sessions);
+
+  alert("Merknaden er lagret.");
+}
+
+function wireButtons() {
+  const tcxButton =
+    document.getElementById(
+      "btn-download-tcx"
+    );
+
+  const jsonButton =
+    document.getElementById(
+      "btn-dump-json"
+    );
+
+  const notesButton =
+    document.getElementById(
+      "save-notes"
+    );
+
+  if (tcxButton) {
+    tcxButton.onclick = () => {
+      try {
+        if (!SESSION) {
+          throw new Error(
+            "Ingen økt er valgt."
+          );
+        }
+
+        const tcx =
+          buildTCX(SESSION);
+
+        downloadBlob(
+          safeFileName(
+            SESSION.name
+          ) + ".tcx",
+          tcx,
+          "application/vnd.garmin.tcx+xml;charset=utf-8"
+        );
+      } catch (error) {
+        console.error(
+          "[INTZ results] TCX-eksport feilet:",
+          error
+        );
+
+        alert(
+          "TCX-eksport feilet: " +
+          (
+            error?.message ||
+            String(error)
+          )
+        );
+      }
+    };
+  }
+
+  if (jsonButton) {
+    jsonButton.onclick = () => {
+      try {
+        if (!SESSION) {
+          throw new Error(
+            "Ingen økt er valgt."
+          );
+        }
+
+        downloadBlob(
+          safeFileName(
+            SESSION.name
+          ) + ".json",
+          JSON.stringify(
+            SESSION,
+            null,
+            2
+          ),
+          "application/json;charset=utf-8"
+        );
+      } catch (error) {
+        alert(
+          "JSON-eksport feilet: " +
+          (
+            error?.message ||
+            String(error)
+          )
+        );
+      }
+    };
+  }
+
+  if (notesButton) {
+    notesButton.onclick =
+      saveNotes;
+  }
 }
 
 function renderChart(session) {
@@ -343,23 +676,36 @@ function renderChart(session) {
     return;
   }
 
-  const context =
-    canvas.getContext("2d");
+  const rect =
+    canvas.getBoundingClientRect();
 
   const ratio =
-    resizeCanvas(canvas);
+    window.devicePixelRatio || 1;
 
-  const width =
-    canvas.width;
+  canvas.width =
+    Math.max(
+      1,
+      Math.floor(
+        rect.width * ratio
+      )
+    );
 
-  const height =
-    canvas.height;
+  canvas.height =
+    Math.max(
+      1,
+      Math.floor(
+        rect.height * ratio
+      )
+    );
+
+  const context =
+    canvas.getContext("2d");
 
   context.clearRect(
     0,
     0,
-    width,
-    height
+    canvas.width,
+    canvas.height
   );
 
   const points =
@@ -367,7 +713,7 @@ function renderChart(session) {
       ? session.points
       : [];
 
-  const valid =
+  const validPoints =
     points.filter(point =>
       Number.isFinite(
         Number(point.hr)
@@ -375,7 +721,9 @@ function renderChart(session) {
       Number(point.hr) > 0
     );
 
-  if (valid.length < 2) {
+  if (
+    validPoints.length < 2
+  ) {
     context.fillStyle =
       "#64748b";
 
@@ -392,87 +740,63 @@ function renderChart(session) {
   }
 
   const values =
-    valid.map(point =>
+    validPoints.map(point =>
       Number(point.hr)
     );
 
   let minimum =
-    Math.min(...values);
+    Math.min(...values) - 5;
 
   let maximum =
-    Math.max(...values);
-
-  minimum -= 5;
-  maximum += 5;
+    Math.max(...values) + 5;
 
   if (maximum <= minimum) {
     maximum = minimum + 1;
   }
 
-  const paddingLeft =
-    48 * ratio;
+  const left = 48 * ratio;
+  const right = 16 * ratio;
+  const top = 18 * ratio;
+  const bottom = 24 * ratio;
 
-  const paddingRight =
-    16 * ratio;
+  const width =
+    canvas.width -
+    left -
+    right;
 
-  const paddingTop =
-    18 * ratio;
+  const height =
+    canvas.height -
+    top -
+    bottom;
 
-  const paddingBottom =
-    26 * ratio;
+  const firstTime =
+    Number(validPoints[0].ts);
 
-  const plotWidth =
-    width -
-    paddingLeft -
-    paddingRight;
-
-  const plotHeight =
-    height -
-    paddingTop -
-    paddingBottom;
-
-  context.strokeStyle =
-    "#e2e8f0";
-
-  context.lineWidth =
-    ratio;
-
-  context.strokeRect(
-    paddingLeft,
-    paddingTop,
-    plotWidth,
-    plotHeight
-  );
-
-  const firstTimestamp =
-    Number(valid[0].ts) || 0;
-
-  const lastTimestamp =
+  const lastTime =
     Number(
-      valid[
-        valid.length - 1
+      validPoints[
+        validPoints.length - 1
       ].ts
-    ) || firstTimestamp + 1;
+    );
 
   const duration =
     Math.max(
       1,
-      lastTimestamp -
-      firstTimestamp
+      lastTime - firstTime
     );
 
   const xFor = point =>
-    paddingLeft +
+    left +
     (
       (
         Number(point.ts) -
-        firstTimestamp
+        firstTime
       ) / duration
     ) *
-    plotWidth;
+    width;
 
   const yFor = point =>
-    paddingTop +
+    top +
     (
       1 -
       (
@@ -484,11 +808,23 @@ function renderChart(session) {
         minimum
       )
     ) *
-    plotHeight;
+    height;
+
+  context.strokeStyle =
+    "#e2e8f0";
+
+  context.lineWidth = ratio;
+
+  context.strokeRect(
+    left,
+    top,
+    width,
+    height
+  );
 
   context.beginPath();
 
-  valid.forEach(
+  validPoints.forEach(
     (point, index) => {
       const x = xFor(point);
       const y = yFor(point);
@@ -508,39 +844,22 @@ function renderChart(session) {
     2 * ratio;
 
   context.stroke();
-
-  context.fillStyle =
-    "#64748b";
-
-  context.font =
-    `${11 * ratio}px system-ui`;
-
-  context.fillText(
-    `${Math.round(maximum)} bpm`,
-    4 * ratio,
-    paddingTop + 8 * ratio
-  );
-
-  context.fillText(
-    `${Math.round(minimum)} bpm`,
-    4 * ratio,
-    paddingTop +
-      plotHeight
-  );
 }
 
-function renderAll(session) {
+function renderResults() {
+  SESSION = pickSession();
+
   const noSession =
     document.getElementById(
       "no-session"
     );
 
   if (
-    !session ||
+    !SESSION ||
     !Array.isArray(
-      session.points
+      SESSION.points
     ) ||
-    !session.points.length
+    !SESSION.points.length
   ) {
     noSession?.classList.remove(
       "hidden"
@@ -553,18 +872,24 @@ function renderAll(session) {
     "hidden"
   );
 
-  renderSummary(session);
-  renderChart(session);
-}
+  const notes =
+    document.getElementById(
+      "notes"
+    );
 
-function initResults() {
-  SESSION = pickSession();
-  renderAll(SESSION);
+  if (notes) {
+    notes.value =
+      SESSION.notes || "";
+  }
+
+  renderSummary(SESSION);
+  renderChart(SESSION);
+  wireButtons();
 }
 
 document.addEventListener(
   "DOMContentLoaded",
-  initResults
+  renderResults
 );
 
 window.addEventListener(
@@ -574,7 +899,7 @@ window.addEventListener(
       event.detail?.view ===
       "results"
     ) {
-      initResults();
+      renderResults();
     }
   }
 );
@@ -584,18 +909,6 @@ window.addEventListener(
   () => {
     if (SESSION) {
       renderChart(SESSION);
-    }
-  }
-);
-
-window.addEventListener(
-  "intz:datachange",
-  () => {
-    if (
-      currentRoute().view ===
-      "results"
-    ) {
-      initResults();
     }
   }
 );
